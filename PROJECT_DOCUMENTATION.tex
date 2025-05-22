@@ -1,0 +1,870 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\geometry{margin=1in}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\title{\Huge Movie Recommender Platform\\[0.5cm] \Large Documentazione Tecnica Completa}
+\author{Team di Sviluppo}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduzione}
+Questo documento fornisce una descrizione dettagliata ed esaustiva dell'architettura, dei componenti e dei servizi AWS utilizzati per implementare la piattaforma di ricerca e raccomandazione film. Verranno esaminati aspetti strutturali, logici e architetturali del sistema, con particolare attenzione ai protocolli di comunicazione, ai modelli di dati e agli algoritmi implementati.
+
+\subsection{Obiettivi del Progetto}
+La piattaforma ha l'obiettivo primario di consentire agli utenti di interagire con un dataset di circa 45.000 film attraverso:
+
+\begin{itemize}[itemsep=0.5em]
+  \item \textbf{Ricerca semantica}: permettere agli utenti di trovare film mediante query in linguaggio naturale, confrontando l'embedding della query con quelli dei film.
+  \item \textbf{Raccomandazioni content-based}: suggerire film simili in base a quelli già visti dall'utente, utilizzando la similarità tra embedding vettoriali.
+  \item \textbf{Raccomandazioni collaborative}: suggerire film che sono piaciuti a utenti con gusti simili, analizzando i pattern di valutazione.
+  \item \textbf{Gestione utenti}: consentire registrazione, autenticazione e autorizzazione degli utenti.
+  \item \textbf{Analisi e monitoring}: tracciare l'utilizzo del sistema e le performance degli algoritmi.
+\end{itemize}
+
+Un requisito fondamentale è quello di implementare queste funzionalità con un budget limitato (50€), utilizzando servizi AWS ed evitando soluzioni AI gestite come Amazon SageMaker o librerie esterne come FAISS per il calcolo della similarità.
+
+\subsection{Panoramica dell'Architettura}
+Il sistema è costruito su un'architettura serverless e orientata ai microservizi che comprende le seguenti componenti principali:
+
+\begin{description}[style=nextline, leftmargin=0cm, itemsep=0.5em]
+  \item[Data Ingestion] Script Python locali (\texttt{data\_processor.py}) che elaborano i file CSV dal dataset Kaggle, estraggono e trasformano i dati, e li caricano in DynamoDB.
+  
+  \item[Embedding Generation] Script Python locale (\texttt{generate\_embeddings.py}) che utilizza Sentence Transformers per generare embedding vettoriali per ogni film e li memorizza su S3.
+  
+  \item[Backend Serverless] Funzioni AWS Lambda (\texttt{search\_lambda.py}) che implementano:
+    \begin{itemize}
+      \item Ricerca semantica mediante similarità coseno
+      \item Content-based filtering basato su embedding medi
+      \item Collaborative filtering basato su similarità tra utenti
+    \end{itemize}
+    
+  \item[API Layer] Amazon API Gateway che espone un endpoint REST per le richieste client.
+  
+  \item[Storage] 
+    \begin{itemize}
+      \item DynamoDB per metadati e recensioni (tabelle \texttt{Movies} e \texttt{Reviews})
+      \item S3 per gli embedding vettoriali (file \texttt{embeddings.jsonl})
+    \end{itemize}
+    
+  \item[Autenticazione] Amazon Cognito per gestire registrazione e autenticazione degli utenti.
+  
+  \item[Monitoring] Amazon CloudWatch per raccogliere log, metriche e allarmi.
+\end{description}
+
+\section{Componenti e Struttura del Codice}
+\subsection{Struttura del Repository}
+Il repository del progetto è organizzato nei seguenti file principali:
+
+\begin{lstlisting}[language=bash]
+movie_recommender/
+├── README.md                   # Guida all'installazione e all'uso
+├── requirements.txt            # Dipendenze Python
+├── create_table.py             # Script per creare tabelle DynamoDB
+├── data_processor.py           # Script per processare e caricare dati
+├── generate_embeddings.py      # Script per generare embedding
+├── search_lambda.py            # Funzione Lambda per ricerca e raccomandazione
+└── PROJECT_DOCUMENTATION.tex   # Documentazione tecnica (questo documento)
+\end{lstlisting}
+
+\subsection{File \texttt{create\_table.py}}
+Questo script è responsabile della creazione delle tabelle DynamoDB necessarie per il sistema. Implementa due funzioni principali:
+
+\begin{itemize}
+  \item \texttt{create\_movies\_table()}: crea la tabella \texttt{Movies} con chiave primaria \texttt{movie\_id}
+  \item \texttt{create\_reviews\_table()}: crea la tabella \texttt{Reviews} con chiave primaria composta (\texttt{user\_id}, \texttt{movie\_id}) e un indice secondario globale \texttt{MovieIndex} su \texttt{movie\_id}
+\end{itemize}
+
+La tabella \texttt{Reviews} include un GSI (Global Secondary Index) \texttt{MovieIndex} che permette query efficienti per movie\_id, essenziali per il collaborative filtering. Entrambe le tabelle sono configurate in modalità \texttt{PAY\_PER\_REQUEST} per ottimizzare i costi in fase di sviluppo e test.
+
+Il codice completo per la creazione delle tabelle è il seguente:
+
+\begin{lstlisting}[language=Python]
+def create_movies_table():
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.create_table(
+        TableName='Movies',
+        KeySchema=[{'AttributeName': 'movie_id', 'KeyType': 'HASH'}],
+        AttributeDefinitions=[{'AttributeName': 'movie_id', 'AttributeType': 'S'}],
+        BillingMode='PAY_PER_REQUEST'
+    )
+    table.meta.client.get_waiter('table_exists').wait(TableName='Movies')
+    print("Table created successfully!")
+
+def create_reviews_table():
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.create_table(
+        TableName='Reviews',
+        KeySchema=[
+            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
+            {'AttributeName': 'movie_id', 'KeyType': 'RANGE'}
+        ],
+        AttributeDefinitions=[
+            {'AttributeName': 'user_id', 'AttributeType': 'S'},
+            {'AttributeName': 'movie_id', 'AttributeType': 'S'}
+        ],
+        GlobalSecondaryIndexes=[{
+            'IndexName': 'MovieIndex',
+            'KeySchema': [
+                {'AttributeName': 'movie_id', 'KeyType': 'HASH'},
+                {'AttributeName': 'user_id', 'KeyType': 'RANGE'}
+            ],
+            'Projection': {'ProjectionType': 'ALL'}
+        }],
+        BillingMode='PAY_PER_REQUEST'
+    )
+    table.meta.client.get_waiter('table_exists').wait(TableName='Reviews')
+    print("Reviews table created successfully!")
+\end{lstlisting}
+
+\subsection{File \texttt{data\_processor.py}}
+Questo script è responsabile del caricamento e della trasformazione dei dati dai file CSV al database DynamoDB. È progettato per processare tre file principali:
+
+\begin{itemize}
+  \item \texttt{movies\_metadata.csv}: contiene informazioni generali sui film
+  \item \texttt{credits.csv}: contiene informazioni su cast e crew
+  \item \texttt{ratings.csv}: contiene le valutazioni degli utenti
+\end{itemize}
+
+La classe \texttt{MovieDataProcessor} include metodi principali:
+
+\begin{itemize}
+  \item \texttt{\_\_init\_\_()}: Inizializza le connessioni a DynamoDB, con supporto per endpoint locale (per testing)
+  \item \texttt{process\_credits()}: Estrae gli attori principali (primi 5) e i registi da \texttt{credits.csv}
+  \item \texttt{process\_movies()}: Processa \texttt{movies\_metadata.csv}, arricchendolo con i dati di \texttt{credits.csv}, e carica i record su DynamoDB
+  \item \texttt{process\_reviews()}: Processa \texttt{ratings.csv} e carica le valutazioni utente nella tabella \texttt{Reviews}
+  \item \texttt{upload\_to\_dynamodb()}/\texttt{upload\_review()}: Caricano record nelle rispettive tabelle
+\end{itemize}
+
+Un elemento importante è la gestione dei tipi di dato per DynamoDB:
+\begin{lstlisting}[language=Python]
+# Converte float a Decimal per compatibilità DynamoDB
+vote_average = Decimal(str(row['vote_average'])) if not pd.isna(row['vote_average']) else Decimal('0')
+
+# Estrazione dell'anno dalla data di rilascio
+try:
+    release_date = datetime.strptime(row['release_date'], '%Y-%m-%d')
+    year = release_date.year
+except (ValueError, TypeError):
+    year = None
+\end{lstlisting}
+
+Lo script supporta un'opzione di testing locale tramite la variabile d'ambiente \texttt{DYNAMODB\_ENDPOINT\_URL}, che permette di puntare a un'istanza DynamoDB locale per test senza costi.
+
+\subsection{File \texttt{generate\_embeddings.py}}
+Questo script è dedicato alla generazione degli embedding vettoriali per ciascun film, utilizzando il modello pre-addestrato \texttt{sentence-transformers/all-MiniLM-L6-v2}, un modello derivato da BERT ma ottimizzato per embedding frase.
+
+Funzioni principali:
+
+\begin{itemize}
+  \item \texttt{load\_data()}: Carica i file CSV necessari
+  \item \texttt{build\_text()}: Combina titolo, trama, generi, attori e registi in un unico testo rappresentativo del film
+  \item \texttt{main()}: Carica il modello, processa i film, genera gli embedding e li salva in formato JSONL sia localmente che su S3
+\end{itemize}
+
+La costruzione del testo per l'embedding è particolarmente importante:
+
+\begin{lstlisting}[language=Python]
+def build_text(movie_row: pd.Series, credits_row: pd.Series) -> str:
+    """Combine movie metadata and credits into a single text for embedding."""
+    parts = []
+    title = movie_row.get('title', '') or ''
+    overview = movie_row.get('overview', '') or ''
+    if title:
+        parts.append(title)
+    if overview:
+        parts.append(overview)
+    # genres
+    try:
+        genres = [g['name'] for g in json.loads(movie_row['genres'])] if pd.notna(movie_row['genres']) else []
+    except:
+        genres = []
+    if genres:
+        parts.append("Genres: " + ", ".join(genres))
+    # actors
+    actors = credits_row.get('actors', [])
+    if actors:
+        parts.append("Actors: " + ", ".join(actors))
+    # directors
+    directors = credits_row.get('directors', [])
+    if directors:
+        parts.append("Directors: " + ", ".join(directors))
+    return ". ".join(parts)
+\end{lstlisting}
+
+Ogni embedding viene salvato in un file JSONL con il formato:
+\begin{lstlisting}[language=json]
+{"movie_id": "123", "embedding": [0.123, -0.456, ...]}
+\end{lstlisting}
+
+Questo formato è efficiente per il caricamento sequenziale ed è direttamente supportato dalla Lambda che implementa la ricerca.
+
+\subsection{File \texttt{search\_lambda.py}}
+Questo script implementa la funzione AWS Lambda che fornisce le funzionalità di ricerca e raccomandazione. È progettato per essere altamente efficiente e include meccanismi di caching degli embedding per ridurre latenza e costi.
+
+Funzioni principali:
+
+\begin{itemize}
+  \item \texttt{get\_model()}, \texttt{get\_s3\_client()}, \texttt{get\_dynamodb()}: Inizializzazione lazy delle risorse
+  \item \texttt{cosine\_similarity()}: Implementazione manuale della similarità coseno con gestione dei casi limite
+  \item \texttt{load\_embeddings()}: Carica gli embedding da S3 con caching
+  \item \texttt{recommend\_semantic()}: Implementa la ricerca semantica
+  \item \texttt{recommend\_content()}: Implementa il content-based filtering
+  \item \texttt{recommend\_collaborative()}: Implementa il collaborative filtering
+  \item \texttt{lambda\_handler()}: Entry point della Lambda, gestisce il dispatcher tra le varie operazioni
+\end{itemize}
+
+L'algoritmo di collaborative filtering merita un'analisi dettagliata:
+
+\begin{enumerate}
+  \item Recupera le recensioni dell'utente corrente
+  \item Per ogni film valutato, trova altri utenti che l'hanno valutato (usando GSI \texttt{MovieIndex})
+  \item Calcola la similarità coseno tra le valutazioni dell'utente corrente e quelle di altri utenti
+  \item Seleziona i top K utenti più simili
+  \item Aggrega le valutazioni degli utenti simili, pesandole per la similarità
+  \item Normalizza i punteggi e restituisce i film con punteggio più alto
+\end{enumerate}
+
+Un esempio di codice cruciale è la funzione di similarità coseno, implementata manualmente:
+
+\begin{lstlisting}[language=Python]
+def cosine_similarity(a, b):
+    a_np = np.array(a)
+    b_np = np.array(b)
+    denom = (np.linalg.norm(a_np) * np.linalg.norm(b_np))
+    return float(np.dot(a_np, b_np) / denom) if denom != 0 else 0.0
+\end{lstlisting}
+
+Il Lambda handler supporta tre operazioni distinte:
+
+\begin{enumerate}
+  \item \texttt{search}: Ricerca semantica basata su query testuale
+  \item \texttt{content}: Raccomandazioni basate su film già visti (content-based)
+  \item \texttt{collaborative}: Raccomandazioni basate su utenti simili (collaborative)
+\end{enumerate}
+
+\section{Data Models e Storage}
+\subsection{Schema DynamoDB per i Film}
+La tabella \texttt{Movies} è strutturata per ottimizzare le query di ricerca e dettaglio. Lo schema include:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Attributo} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+movie\_id & String & Chiave primaria, identificativo univoco del film \\
+title & String & Titolo del film \\
+overview & String & Trama o sinossi del film \\
+release\_year & Number & Anno di uscita del film \\
+genres & List<String> & Lista dei generi del film \\
+actors & List<String> & Lista dei principali attori (max 5) \\
+directors & List<String> & Lista dei registi \\
+vote\_average & Number & Valutazione media (scala 0-10) \\
+vote\_count & Number & Numero di valutazioni ricevute \\
+budget & Number & Budget di produzione (quando disponibile) \\
+poster\_path & String & Percorso alla locandina (quando disponibile) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Schema DynamoDB per le Recensioni}
+La tabella \texttt{Reviews} è progettata per supportare efficientemente sia le query per utente che quelle per film (tramite GSI):
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Attributo} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+user\_id & String & Chiave primaria (hash), ID utente \\
+movie\_id & String & Chiave primaria (range), ID film \\
+rating & Number & Valutazione (scala 0-5) \\
+timestamp & Number & Timestamp della recensione (quando disponibile) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Indice Secondario Globale}
+Il GSI \texttt{MovieIndex} permette di interrogare rapidamente tutte le recensioni per un determinato film, fondamentale per il collaborative filtering:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Attributo} & \textbf{Tipo} & \textbf{Descrizione} \\
+\midrule
+movie\_id & String & Chiave hash per il GSI \\
+user\_id & String & Chiave range per il GSI \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Storage degli Embedding su S3}
+Gli embedding sono memorizzati in S3 in formato JSONL, con ogni riga che rappresenta un film. La scelta del formato JSONL permette:
+
+\begin{itemize}
+  \item Accesso sequenziale efficiente
+  \item Caricamento incrementale (con S3 Select)
+  \item Buona compressibilità
+\end{itemize}
+
+Gli embedding sono vettori di dimensione 384 (per \texttt{all-MiniLM-L6-v2}) che catturano le caratteristiche semantiche del film basandosi su titolo, trama, generi, cast e registi.
+
+\section{Algoritmi di Raccomandazione}
+\subsection{Ricerca Semantica}
+La ricerca semantica implementa i seguenti passaggi:
+
+\begin{enumerate}
+  \item Riceve una query testuale dall'utente (es. "film di fantascienza con alieni")
+  \item Trasforma la query in un embedding vettoriale usando lo stesso modello dei film
+  \item Carica gli embedding di tutti i film da S3
+  \item Calcola la similarità coseno tra l'embedding della query e quello di ogni film
+  \item Ordina i film per similarità decrescente e restituisce i top-k risultati
+\end{enumerate}
+
+La formula della similarità coseno è:
+
+\begin{equation}
+\text{cosine\_similarity}(\vec{a}, \vec{b}) = \frac{\vec{a} \cdot \vec{b}}{\|\vec{a}\| \cdot \|\vec{b}\|}
+\end{equation}
+
+dove $\vec{a}$ e $\vec{b}$ sono gli embedding vettoriali, $\vec{a} \cdot \vec{b}$ è il prodotto scalare, e $\|\vec{a}\|$ è la norma euclidea del vettore.
+
+\subsection{Content-Based Filtering}
+Il content-based filtering implementa:
+
+\begin{enumerate}
+  \item Riceve una lista di film già visti dall'utente
+  \item Recupera gli embedding corrispondenti
+  \item Calcola un embedding medio che rappresenta i gusti dell'utente
+  \item Calcola la similarità coseno tra questo embedding medio e tutti gli altri film
+  \item Esclude i film già visti e restituisce i top-k film più simili
+\end{enumerate}
+
+L'embedding medio è calcolato come:
+
+\begin{equation}
+\vec{e}_{\text{avg}} = \frac{1}{n} \sum_{i=1}^{n} \vec{e}_i
+\end{equation}
+
+dove $\vec{e}_i$ sono gli embedding dei film già visti.
+
+\subsection{Collaborative Filtering}
+Il collaborative filtering implementa un approccio user-based:
+
+\begin{enumerate}
+  \item Recupera le valutazioni dell'utente corrente
+  \item Per ogni film valutato, trova altri utenti che l'hanno valutato
+  \item Calcola la similarità tra utenti basata sulle valutazioni comuni
+  \item Identifica i "vicini più prossimi" (utenti con gusti simili)
+  \item Per ogni film non visto dall'utente corrente, calcola un punteggio pesato basato sulle valutazioni dei vicini
+  \item Restituisce i film con i punteggi più alti
+\end{enumerate}
+
+La formula per il punteggio predetto è:
+
+\begin{equation}
+\hat{r}_{u,i} = \frac{\sum_{v \in N(u)} \text{sim}(u,v) \cdot r_{v,i}}{\sum_{v \in N(u)} \text{sim}(u,v)}
+\end{equation}
+
+dove $\hat{r}_{u,i}$ è la valutazione prevista per l'utente $u$ sul film $i$, $N(u)$ è l'insieme dei vicini di $u$, $\text{sim}(u,v)$ è la similarità tra utenti, e $r_{v,i}$ è la valutazione data dall'utente $v$ al film $i$.
+
+\section{Servizi AWS Utilizzati}
+\subsection{AWS Lambda}
+AWS Lambda esegue il codice serverless senza richiedere la gestione dell'infrastruttura. Nel nostro caso, viene utilizzato per implementare le operazioni di ricerca e raccomandazione. I vantaggi principali sono:
+
+\begin{itemize}
+  \item Pay-per-use: pagamento solo per il tempo di elaborazione effettivo
+  \item Scalabilità automatica: gestione automatica dell'aumento di richieste
+  \item Integrazione con altri servizi AWS: connessione nativa con API Gateway, DynamoDB, S3
+\end{itemize}
+
+Configurazione ottimale:
+\begin{itemize}
+  \item Memory: 512 MB (aumentabile se necessario per performance)
+  \item Timeout: 30 secondi
+  \item Concurrency: utilizzo del pool condiviso per iniziare
+\end{itemize}
+
+\subsection{Amazon DynamoDB}
+DynamoDB è un database NoSQL serverless che offre prestazioni rapide e prevedibili con scalabilità automatica. Viene utilizzato per archiviare metadati dei film e recensioni utente.
+
+Vantaggi:
+\begin{itemize}
+  \item Latenza costante indipendentemente dalla scala
+  \item Scalabilità automatica
+  \item Accesso tramite chiave primaria in O(1)
+  \item Modalità on-demand per ottimizzare i costi in fase di sviluppo
+\end{itemize}
+
+\subsection{Amazon S3}
+S3 viene utilizzato per archiviare gli embedding vettoriali generati per ogni film. La scelta di S3 è motivata da:
+
+\begin{itemize}
+  \item Costo di archiviazione molto basso
+  \item Accesso rapido a oggetti specifici
+  \item Durabilità estrema (99,999999999\%)
+  \item Scalabilità illimitata
+\end{itemize}
+
+\subsection{Amazon API Gateway}
+API Gateway espone l'endpoint RESTful che permette ai client di interagire con le funzioni Lambda. Configurazione:
+
+\begin{itemize}
+  \item Metodo POST all'endpoint /recommend
+  \item Integrazione AWS\_PROXY con la Lambda
+  \item Deployment in stage "prod"
+\end{itemize}
+
+\subsection{Amazon Cognito}
+Cognito gestisce registrazione, login e autorizzazione degli utenti:
+
+\begin{itemize}
+  \item User Pools per l'autenticazione e memorizzazione degli utenti
+  \item Identity Pools per l'accesso sicuro a risorse AWS
+  \item Supporto per OAuth 2.0 e OpenID Connect
+\end{itemize}
+
+\subsection{Amazon CloudWatch}
+CloudWatch monitora l'applicazione con:
+
+\begin{itemize}
+  \item Log per debugging e audit
+  \item Metriche per performance e utilizzo
+  \item Allarmi per notifiche proattive
+\end{itemize}
+
+\section{Processo di Deploy}
+Il deployment su AWS segue questi passaggi sequenziali:
+
+\subsection{Creazione delle Risorse di Base}
+\begin{enumerate}
+  \item Creazione di un bucket S3 per gli embedding:
+\begin{lstlisting}[language=bash]
+aws s3 mb s3://<EMBEDDINGS_BUCKET> --region <your-region>
+\end{lstlisting}
+
+  \item Creazione delle tabelle DynamoDB:
+\begin{lstlisting}[language=bash]
+python3 create_table.py
+\end{lstlisting}
+\end{enumerate}
+
+\subsection{Ingestione dei Dati}
+\begin{enumerate}
+  \item Processamento dei metadati film e recensioni:
+\begin{lstlisting}[language=bash]
+python3 data_processor.py
+\end{lstlisting}
+
+  \item Generazione degli embedding e caricamento su S3:
+\begin{lstlisting}[language=bash]
+export EMBEDDINGS_BUCKET=<your-bucket-name>
+python3 generate_embeddings.py
+\end{lstlisting}
+\end{enumerate}
+
+\subsection{Configurazione della Lambda}
+\begin{enumerate}
+  \item Creazione di un package ZIP con tutte le dipendenze:
+\begin{lstlisting}[language=bash]
+mkdir package && cd package
+pip install -r ../requirements.txt -t .
+cp ../search_lambda.py .
+zip -r ../search_lambda.zip .
+\end{lstlisting}
+
+  \item Creazione e configurazione della funzione Lambda:
+\begin{lstlisting}[language=bash]
+aws lambda create-function \
+  --function-name MovieSearchFunction \
+  --runtime python3.9 \
+  --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_EXEC_ROLE> \
+  --handler search_lambda.lambda_handler \
+  --timeout 30 \
+  --memory-size 512 \
+  --zip-file fileb://search_lambda.zip \
+  --environment Variables='{
+      "EMBEDDINGS_BUCKET":"<your-bucket-name>",
+      "EMBEDDINGS_OUTPUT_FILE":"embeddings.jsonl",
+      "EMBEDDING_MODEL":"sentence-transformers/all-MiniLM-L6-v2", 
+      "DYNAMODB_TABLE":"Movies",
+      "REVIEWS_TABLE":"Reviews"
+  }'
+\end{lstlisting}
+\end{enumerate}
+
+\subsection{Configurazione API Gateway}
+\begin{enumerate}
+  \item Creazione della REST API:
+\begin{lstlisting}[language=bash]
+aws apigateway create-rest-api --name "MovieRecommenderAPI"
+\end{lstlisting}
+
+  \item Recupero dell'ID della root resource e creazione della risorsa:
+\begin{lstlisting}[language=bash]
+aws apigateway get-resources --rest-api-id <api-id>
+aws apigateway create-resource --rest-api-id <api-id> \
+  --parent-id <root-id> --path-part recommend
+\end{lstlisting}
+
+  \item Impostazione del metodo POST e integrazione con Lambda:
+\begin{lstlisting}[language=bash]
+aws apigateway put-method --rest-api-id <api-id> \
+  --resource-id <rec-id> --http-method POST \
+  --authorization-type NONE
+
+aws apigateway put-integration --rest-api-id <api-id> \
+  --resource-id <rec-id> --http-method POST \
+  --type AWS_PROXY --integration-http-method POST \
+  --uri arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/arn:aws:lambda:<region>:<account-id>:function:MovieSearchFunction/invocations
+\end{lstlisting}
+
+  \item Configurazione delle autorizzazioni Lambda:
+\begin{lstlisting}[language=bash]
+aws lambda add-permission \
+  --function-name MovieSearchFunction \
+  --statement-id apigateway-access \
+  --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn arn:aws:execute-api:<region>:<account-id>:<api-id>/*/POST/recommend
+\end{lstlisting}
+
+  \item Deployment dell'API:
+\begin{lstlisting}[language=bash]
+aws apigateway create-deployment --rest-api-id <api-id> \
+  --stage-name prod
+\end{lstlisting}
+\end{enumerate}
+
+\section{Testing e Utilizzo}
+\subsection{Test della Lambda}
+La Lambda può essere testata localmente usando:
+
+\begin{itemize}
+  \item DynamoDB Local per database in locale
+  \item Moto per mocking dei servizi AWS
+  \item MinIO come alternativa locale a S3
+\end{itemize}
+
+\subsection{Test dell'API}
+L'API può essere testata con curl:
+
+\begin{lstlisting}[language=bash]
+# Ricerca semantica
+curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/prod/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"operation":"search","query":"sci-fi thriller about space","top_k":5}'
+
+# Content-based filtering
+curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/prod/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"operation":"content","movie_ids":["123","456"],"top_k":5}'
+
+# Collaborative filtering
+curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/prod/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"operation":"collaborative","user_id":"42","top_k":5}'
+\end{lstlisting}
+
+\section{Considerazioni sulla Performance e Budget}
+\subsection{Budget}
+Con un budget target di 50€, il sistema è ottimizzato per:
+
+\begin{itemize}
+  \item Utilizzo di servizi serverless per pagare solo in base all'uso
+  \item Utilizzo di DynamoDB on-demand per evitare costi di capacity allocation
+  \item Caching in Lambda per ridurre accessi a S3
+  \item Lazy initialization di risorse costose
+\end{itemize}
+
+\subsection{Ottimizzazione delle Performance}
+Per ottimizzare le performance, il sistema include:
+
+\begin{itemize}
+  \item Caching degli embedding in memoria Lambda
+  \item Inizializzazione lazy del modello e delle connessioni
+  \item Calcolo ottimizzato della similarità vettoriale
+  \item Indice secondario globale per query efficiente su recensioni
+\end{itemize}
+
+\subsection{Sicurezza}
+La sicurezza è garantita da:
+
+\begin{itemize}
+  \item IAM roles con privilegi minimi
+  \item Autenticazione e autorizzazione tramite Cognito
+  \item Variabili di ambiente per configurazione sicura
+  \item API Gateway per controllo d'accesso
+\end{itemize}
+
+\section{API Gateway e Comunicazione con il Frontend}
+\subsection{Struttura delle API}
+L'applicazione espone diverse API per supportare varie funzionalità di ricerca e raccomandazione. Queste API sono implementate attraverso AWS API Gateway e AWS Lambda. La struttura complessiva delle API è:
+
+\begin{lstlisting}[language=bash]
+/search               # Endpoint per ricerca semantica
+/content              # Endpoint per raccomandazioni content-based
+/collaborative        # Endpoint per raccomandazioni collaborative
+/recommend            # Endpoint generico (supporta tutti i tipi)
+\end{lstlisting}
+
+\subsection{Configurazione di API Gateway}
+Per automatizzare la creazione e configurazione dell'API Gateway, è stato implementato lo script \texttt{api\_gateway\_setup.py} che utilizza il boto3 SDK per:
+
+\begin{itemize}
+  \item Creare una nuova API REST
+  \item Configurare le risorse e i metodi HTTP
+  \item Impostare l'integrazione con Lambda
+  \item Configurare CORS per supportare richieste cross-origin dal frontend
+  \item Deployare l'API in un ambiente di produzione
+  \item Configurare le impostazioni di throttling per limitare il traffico
+\end{itemize}
+
+Un esempio del codice di configurazione:
+
+\begin{lstlisting}[language=Python]
+def create_api(self, api_name='MovieRecommenderAPI'):
+    response = self.apigw.create_rest_api(
+        name=api_name,
+        description='API for Movie Recommender System',
+        endpointConfiguration={'types': ['REGIONAL']},
+        corsConfiguration={
+            'allowOrigins': ['*'],  # Per sviluppo; limitare in produzione
+            'allowMethods': ['POST', 'OPTIONS'],
+            'allowHeaders': ['Content-Type', 'Authorization'],
+            'maxAge': 3600
+        }
+    )
+    # ...
+\end{lstlisting}
+
+\subsection{Lambda Router}
+Per gestire le diverse tipologie di richieste provenienti dal frontend, il progetto include un router Lambda specializzato (\texttt{search\_lambda\_router.py}) che:
+
+\begin{itemize}
+  \item Determina l'operazione richiesta dal path dell'URL o dal parametro \texttt{operation}
+  \item Estrae i parametri dalla querystring o dal corpo JSON della richiesta
+  \item Esegue la validazione dei parametri
+  \item Instrada la richiesta alla funzione di elaborazione appropriata
+  \item Gestisce gli errori e formatta le risposte con header CORS appropriati
+\end{itemize}
+
+Il seguente snippet mostra l'architettura di routing:
+
+\begin{lstlisting}[language=Python]
+def lambda_handler(event, context):
+    # Estrae path da API Gateway event
+    path = None
+    if event.get('resource'):
+        path = event.get('path', '').strip('/')
+    
+    # Determina operazione da path o parametri
+    operation = None
+    if path in ['search', 'content', 'collaborative']:
+        operation = path
+    else:
+        operation = request_body.get('operation')
+    
+    # Routing alla funzione appropriata
+    if operation == 'search':
+        result = search_engine.recommend_semantic(query, top_k)
+    elif operation == 'content':
+        result = search_engine.recommend_content(movie_ids, top_k)
+    elif operation == 'collaborative':
+        result = search_engine.recommend_collaborative(user_id, top_k)
+    # ...
+\end{lstlisting}
+
+\subsection{Formato delle Richieste e Risposte}
+
+\subsubsection{Richieste API}
+Ogni endpoint accetta richieste HTTP POST con un corpo JSON che specifica i parametri per l'operazione.
+
+\textbf{Ricerca Semantica:}
+\begin{lstlisting}[language=json]
+{
+  "query": "avventura spaziale con alieni",
+  "top_k": 5
+}
+\end{lstlisting}
+
+\textbf{Content-Based Filtering:}
+\begin{lstlisting}[language=json]
+{
+  "movie_ids": ["123", "456", "789"],
+  "top_k": 10
+}
+\end{lstlisting}
+
+\textbf{Collaborative Filtering:}
+\begin{lstlisting}[language=json]
+{
+  "user_id": "42",
+  "top_k": 8
+}
+\end{lstlisting}
+
+\subsubsection{Risposte API}
+Le risposte hanno un formato HTTP standard:
+
+\begin{lstlisting}[language=json]
+{
+  "statusCode": 200,
+  "headers": {
+    "Access-Control-Allow-Origin": "*",
+    "Content-Type": "application/json"
+  },
+  "body": [
+    {
+      "movie_id": "123",
+      "title": "Interstellar",
+      "overview": "...",
+      "score": 0.87,
+      "release_year": 2014,
+      "genres": ["Adventure", "Drama", "Science Fiction"],
+      "actors": ["Matthew McConaughey", "Anne Hathaway"]
+    },
+    // Altri film...
+  ]
+}
+\end{lstlisting}
+
+\subsection{Sicurezza delle API}
+
+\subsubsection{CORS}
+Il Cross-Origin Resource Sharing (CORS) è configurato per consentire richieste da origini specifiche. Per lo sviluppo, è impostato per accettare richieste da qualsiasi origine (\texttt{*}), ma in produzione dovrebbe essere limitato ai domini frontali autorizzati.
+
+\subsubsection{Autenticazione}
+L'API supporta autenticazione opzionale tramite Amazon Cognito:
+
+\begin{lstlisting}[language=Python]
+self.apigw.put_method(
+    restApiId=api_id,
+    resourceId=resource_id,
+    httpMethod='POST',
+    authorizationType='NONE',  # Cambiare in 'COGNITO_USER_POOLS' per produzione
+    apiKeyRequired=False
+)
+\end{lstlisting}
+
+In produzione, \texttt{authorizationType} dovrebbe essere impostato su \texttt{COGNITO\_USER\_POOLS} e collegato a un Cognito User Pool appropriato.
+
+\subsection{Throttling e Quote}
+Per prevenire l'uso eccessivo delle API e contenere i costi, viene applicato il throttling:
+
+\begin{lstlisting}[language=Python]
+self.apigw.update_stage(
+    restApiId=api_id,
+    stageName=stage_name,
+    patchOperations=[
+        {
+            'op': 'replace',
+            'path': '/*/*/throttling/rateLimit',
+            'value': '100'  # Limite a 100 richieste al secondo
+        },
+        {
+            'op': 'replace',
+            'path': '/*/*/throttling/burstLimit',
+            'value': '200'  # Limite di burst a 200 richieste
+        }
+    ]
+)
+\end{lstlisting}
+
+Questo configura un limite di 100 richieste al secondo con picchi fino a 200 richieste, bilanciando prestazioni e costi.
+
+\subsection{Integrazione con il Frontend}
+
+Il frontend può interagire con le API utilizzando richieste HTTP standard:
+
+\begin{lstlisting}[language=javascript]
+// Esempio di chiamata API da frontend JavaScript
+async function searchMovies(query) {
+  const response = await fetch('https://api-id.execute-api.region.amazonaws.com/prod/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      query: query,
+      top_k: 10
+    })
+  });
+  
+  if (!response.ok) {
+    throw new Error('Network response was not ok');
+  }
+  
+  return await response.json();
+}
+\end{lstlisting}
+
+\section{Conclusioni}
+Il sistema implementato rappresenta una soluzione completa per la ricerca semantica e la raccomandazione di film, conforme ai requisiti di budget e prestazioni. L'architettura serverless su AWS garantisce scalabilità, resilienza e costi ottimizzati, mentre gli algoritmi di filtering implementati offrono raccomandazioni di alta qualità attraverso approcci sia content-based che collaborative.
+
+La documentazione fornita dovrebbe consentire a nuovi sviluppatori di comprendere, utilizzare ed estendere il sistema secondo necessità. Il design modulare facilita l'aggiunta di nuovi componenti o l'ottimizzazione di quelli esistenti senza riscritture significative.
+
+\section{Possibili Estensioni Future}
+\subsection{Miglioramenti Tecnici}
+\begin{itemize}
+  \item Implementazione di modelli di embedding più avanzati
+  \item Partizionamento degli embedding per ridurre la latenza
+  \item Caching distribuito con ElastiCache
+  \item Implementazione di un sistema di A/B testing
+\end{itemize}
+
+\subsection{Nuove Funzionalità}
+\begin{itemize}
+  \item Raccomandazioni ibride (combinazione content-based e collaborative)
+  \item Personalizzazione basata sul contesto (ora del giorno, dispositivo, ecc.)
+  \item Supporto per feedback implicito (visualizzazioni, click, tempo di visione)
+  \item Interfaccia di amministrazione per gestire contenuti e utenti
+\end{itemize}
+
+\subsection{Integrazione con Servizi AWS Avanzati}
+\begin{itemize}
+  \item AWS Step Functions per orchestrare flussi di lavoro complessi
+  \item AWS SageMaker per training di modelli di embedding personalizzati
+  \item AWS Comprehend per analisi delle recensioni testuali
+  \item Amazon Personalize per raccomandazioni con ML gestito (se il budget aumenta)
+\end{itemize}
+
+\end{document} 
