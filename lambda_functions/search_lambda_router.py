@@ -72,7 +72,7 @@ def lambda_handler(event, context):
             if not movie_ids:
                 return error_response('Missing movie_ids parameter')
                 
-            result = search_engine.recommend_content(movie_ids, top_k)
+            result = search_engine.recommend_content(movie_ids, top_k) # da controllare
             
         elif operation == 'collaborative':
             # Support both user_id and movieId parameters
@@ -89,6 +89,7 @@ def lambda_handler(event, context):
             result = search_engine.recommend_collaborative(user_id, top_k)
             
         elif operation == 'recommend':
+            # Questa operazione è superflua, fa una ricerca utilizzando il modello
             # Handle recommendations (can be based on history or genre preferences)
             # For now, just return popular movies if no specific parameters
             user_id = request_body.get('user_id')
