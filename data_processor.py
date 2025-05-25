@@ -7,7 +7,9 @@ import os
 from typing import Dict, List, Any
 import tqdm
 import zipfile
+import sys
 import re  # aggiungi questo import all'inizio del file
+import time
 
 class MovieDataProcessor:
     def __init__(self):
@@ -108,13 +110,17 @@ class MovieDataProcessor:
         error_count = 0
         
         for idx, row in tqdm.tqdm(movies_df.iterrows(), total=len(movies_df), desc="Processing movies"):
+           
             try:
                 movie_id = str(row['id'])
-                if movie_id == '0':
+                if movie_id == "0":
                     continue
-                
+                if pd.isna(row['title']) and not pd.isna(row['original_title']):
+                    movies_df.at[idx, 'title'] = row['original_title']
+                    
                 # Skip if we don't have valid basic data
-                if pd.isna(row['title']) or pd.isna(row['overview']):
+                if pd.isna(row['title']) or pd.isna(row['overview']) or pd.isna(row['id']):
+                    print(f"Skipping movie {movie_id} due to missing title or overview.")
                     continue
                 
                 # Extract year from release date
@@ -126,7 +132,6 @@ class MovieDataProcessor:
                 
                 # Get credits info
                 credits_info = credits_dict.get(movie_id, {'actors': [], 'directors': []})
-                
                 # Prepare genres
                 genres = []
                 if not pd.isna(row['genres']):
@@ -168,7 +173,7 @@ class MovieDataProcessor:
                 # Update CSV immediately after successful processing
                 movies_df.at[idx, 'id'] = 0
                 
-                if processed_count%100 == 0:
+                if processed_count%1000 == 0:
                     movies_df.to_csv(movies_path, index=False)
                 processed_count += 1
             except Exception as e:
@@ -186,15 +191,12 @@ class MovieDataProcessor:
             print(f"Error uploading movie {item['movie_id']}: {str(e)}")
 
     def process_reviews(self, ratings_file: str):
-        """Process ratings.csv from zip file to extract user reviews and upload to DynamoDB."""
         print(f"\nStarting processing of ratings from {ratings_file}")
 
         processed_count = 0
         error_count = 0
-        temp_csv = 'temp_ratings.csv'
-
+    
         ratings_df = pd.read_csv(ratings_file)
-        ratings_df.to_csv(temp_csv, index=False)
 
         for idx, row in tqdm.tqdm(ratings_df.iterrows(), total=len(ratings_df), desc="Processing ratings"):
             try:
@@ -204,16 +206,17 @@ class MovieDataProcessor:
                     'rating': Decimal(str(row['rating'])),
                     'timestamp': int(row['timestamp'])
                 }
-                self.upload_review(item)
+                
                 if ratings_df.at[idx, 'userId'] == 0:
                     continue
                 
+                self.upload_review(item)
                 # Update CSV immediately after successful processing
                 ratings_df.at[idx, 'userId'] = 0
                 
                 processed_count += 1
-                if processed_count % 100 == 0:
-                    ratings_df.to_csv("ratings.csv", index=False)
+                if processed_count % 1000 == 0:
+                    ratings_df.to_csv(ratings_file, index=False)
             except Exception as e:
                 print(f"Error processing review {row.get('userId')}-{row.get('movieId')}: {e}")
                 error_count += 1
@@ -232,14 +235,17 @@ def main():
     processor = MovieDataProcessor()
     
     # Process credits first
-    #credits_dict = processor.process_credits('credits.csv')
+    credits_dict = processor.process_credits('credits.csv')
+    # number of movies in credits_dict
+    print(f"Number of movies in credits_dict: {len(credits_dict)}")
     
     # Process movies and upload to DynamoDB
-    #processor.process_movies('movies_metadata.csv', credits_dict)
+    processor.process_movies('movies_metadata.csv', credits_dict)
     # Process user reviews from zip file and upload to DynamoDB
-    processor.process_reviews('ratings.csv.zip')
+    processor.process_reviews('ratings_small.csv')
 
 if __name__ == "__main__":
     main()
+    
     
     

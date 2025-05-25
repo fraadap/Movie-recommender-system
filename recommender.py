@@ -196,9 +196,7 @@ class RecommendationEngine:
         for other_user_id, other_ratings in movie_ratings.items():
             # Get common movies
             common_movies = set(user_ratings.keys()) & set(other_ratings.keys())
-            if len(common_movies) < 5:  # Require at least 5 common movies
-                continue
-                
+            
             # Create rating vectors
             u1 = [user_ratings[m] for m in common_movies]
             u2 = [other_ratings[m] for m in common_movies]
