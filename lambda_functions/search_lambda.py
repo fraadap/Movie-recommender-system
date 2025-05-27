@@ -127,7 +127,7 @@ def recommend_collaborative(user_id, top_k):
     return results[:top_k]
 
 
-def lambda_handler(event, context):
+def lambda_handler(event, context): # Solo per testing, il vero handler sarà in search_lambda_router.py
     op = event.get('operation')
     try:
         top_k = int(event.get('top_k', 10))

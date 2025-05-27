@@ -36,7 +36,7 @@ def lambda_handler(event, context):
     
     # Determine operation from path or body
     operation = None
-    if path in ['search', 'content', 'collaborative', 'recommend']:
+    if path in ['search', 'content', 'collaborative']:
         operation = path
     else:
         operation = request_body.get('operation')
@@ -87,23 +87,6 @@ def lambda_handler(event, context):
                 return error_response('Missing user_id or movie_id parameter')
                 
             result = search_engine.recommend_collaborative(user_id, top_k)
-            
-        elif operation == 'recommend':
-            # Questa operazione è superflua, fa una ricerca utilizzando il modello
-            # Handle recommendations (can be based on history or genre preferences)
-            # For now, just return popular movies if no specific parameters
-            user_id = request_body.get('user_id')
-            genre = request_body.get('genre')
-            
-            if user_id:
-                # Personalized recommendations based on user history
-                result = search_engine.recommend_collaborative(user_id, top_k)
-            elif genre:
-                # Genre-based recommendations
-                result = search_engine.recommend_semantic(f"Movies in genre {genre}", top_k)
-            else:
-                # Default recommendations (popular movies)
-                result = search_engine.recommend_semantic("Popular highly rated movies", top_k)
             
         else:
             return error_response(f'Invalid operation: {operation}')
