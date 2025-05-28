@@ -33,10 +33,6 @@ def lambda_handler(event, context):
             return handle_register(event)
         elif path.endswith('/auth/refresh') and http_method == 'POST':
             return handle_refresh(event)
-        elif path.endswith('/auth/password') and http_method == 'PUT':
-            return handle_password_change(event)
-        elif path.endswith('/auth/profile') and http_method == 'PUT':
-            return handle_profile_update(event)
         else:
             return build_response(404, {'error': 'Not found'})
     
@@ -210,103 +206,6 @@ def handle_refresh(event):
         print(f"Refresh token error: {str(e)}")
         return build_response(500, {'error': 'Error refreshing token'})
 
-def handle_password_change(event):
-    """
-    Handle password change
-    """
-    try:
-        # Verify JWT token
-        user = get_authenticated_user(event)
-        if not user:
-            return build_response(401, {'error': 'Authentication required'})
-        
-        # Parse request body
-        request_body = json.loads(event.get('body', '{}'))
-        current_password = request_body.get('current_password')
-        new_password = request_body.get('new_password')
-        
-        if not current_password or not new_password:
-            return build_response(400, {'error': 'Current password and new password are required'})
-        
-        # Verify current password
-        if not verify_password(current_password, user.get('password_hash'), user.get('salt')):
-            return build_response(401, {'error': 'Current password is incorrect'})
-        
-        # Validate new password
-        if len(new_password) < 8:
-            return build_response(400, {'error': 'New password must be at least 8 characters'})
-        
-        # Generate new password hash
-        salt = generate_salt()
-        password_hash = hash_password(new_password, salt)
-        
-        # Update user record
-        users_table.update_item(
-            Key={'email': user.get('email')},
-            UpdateExpression='SET password_hash = :ph, salt = :s, updated_at = :u',
-            ExpressionAttributeValues={
-                ':ph': password_hash,
-                ':s': salt,
-                ':u': int(time.time())
-            }
-        )
-        
-        return build_response(200, {'message': 'Password updated successfully'})
-    
-    except Exception as e:
-        print(f"Password change error: {str(e)}")
-        return build_response(500, {'error': 'Error changing password'})
-
-def handle_profile_update(event):
-    """
-    Handle profile update
-    """
-    try:
-        # Verify JWT token
-        user = get_authenticated_user(event)
-        if not user:
-            return build_response(401, {'error': 'Authentication required'})
-        
-        # Parse request body
-        request_body = json.loads(event.get('body', '{}'))
-        name = request_body.get('name')
-        
-        if not name:
-            return build_response(400, {'error': 'Name is required'})
-        
-        # Update user record
-        users_table.update_item(
-            Key={'email': user.get('email')},
-            UpdateExpression='SET #name = :n, updated_at = :u',
-            ExpressionAttributeNames={
-                '#name': 'name'  # 'name' is a reserved word in DynamoDB
-            },
-            ExpressionAttributeValues={
-                ':n': name,
-                ':u': int(time.time())
-            }
-        )
-        
-        # Get updated user
-        response = users_table.get_item(
-            Key={'email': user.get('email')}
-        )
-        
-        updated_user = response.get('Item', {})
-        
-        return build_response(200, {
-            'user': {
-                'id': updated_user.get('user_id'),
-                'name': updated_user.get('name'),
-                'email': updated_user.get('email'),
-                'created_at': updated_user.get('created_at')
-            }
-        })
-    
-    except Exception as e:
-        print(f"Profile update error: {str(e)}")
-        return build_response(500, {'error': 'Error updating profile'})
-
 # Helper functions
 def get_authenticated_user(event):
     """
@@ -389,3 +288,103 @@ def build_response(status_code, body):
         },
         'body': json.dumps(body)
     } 
+    
+    
+    """   Funzioni buttate
+    
+    def handle_password_change(event):
+
+    #Handle password change
+    try:
+        # Verify JWT token
+        user = get_authenticated_user(event)
+        if not user:
+            return build_response(401, {'error': 'Authentication required'})
+        
+        # Parse request body
+        request_body = json.loads(event.get('body', '{}'))
+        current_password = request_body.get('current_password')
+        new_password = request_body.get('new_password')
+        
+        if not current_password or not new_password:
+            return build_response(400, {'error': 'Current password and new password are required'})
+        
+        # Verify current password
+        if not verify_password(current_password, user.get('password_hash'), user.get('salt')):
+            return build_response(401, {'error': 'Current password is incorrect'})
+        
+        # Validate new password
+        if len(new_password) < 8:
+            return build_response(400, {'error': 'New password must be at least 8 characters'})
+        
+        # Generate new password hash
+        salt = generate_salt()
+        password_hash = hash_password(new_password, salt)
+        
+        # Update user record
+        users_table.update_item(
+            Key={'email': user.get('email')},
+            UpdateExpression='SET password_hash = :ph, salt = :s, updated_at = :u',
+            ExpressionAttributeValues={
+                ':ph': password_hash,
+                ':s': salt,
+                ':u': int(time.time())
+            }
+        )
+        
+        return build_response(200, {'message': 'Password updated successfully'})
+    
+    except Exception as e:
+        print(f"Password change error: {str(e)}")
+        return build_response(500, {'error': 'Error changing password'})
+
+def handle_profile_update(event):
+    # Handle profile update
+
+    try:
+        # Verify JWT token
+        user = get_authenticated_user(event)
+        if not user:
+            return build_response(401, {'error': 'Authentication required'})
+        
+        # Parse request body
+        request_body = json.loads(event.get('body', '{}'))
+        name = request_body.get('name')
+        
+        if not name:
+            return build_response(400, {'error': 'Name is required'})
+        
+        # Update user record
+        users_table.update_item(
+            Key={'email': user.get('email')},
+            UpdateExpression='SET #name = :n, updated_at = :u',
+            ExpressionAttributeNames={
+                '#name': 'name'  # 'name' is a reserved word in DynamoDB
+            },
+            ExpressionAttributeValues={
+                ':n': name,
+                ':u': int(time.time())
+            }
+        )
+        
+        # Get updated user
+        response = users_table.get_item(
+            Key={'email': user.get('email')}
+        )
+        
+        updated_user = response.get('Item', {})
+        
+        return build_response(200, {
+            'user': {
+                'id': updated_user.get('user_id'),
+                'name': updated_user.get('name'),
+                'email': updated_user.get('email'),
+                'created_at': updated_user.get('created_at')
+            }
+        })
+    
+    except Exception as e:
+        print(f"Profile update error: {str(e)}")
+        return build_response(500, {'error': 'Error updating profile'})
+
+    """

@@ -12,6 +12,7 @@ users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Use
 favorites_table = dynamodb.Table(os.environ.get('FAVORITES_TABLE', 'MovieRecommender_Favorites'))
 watched_table = dynamodb.Table(os.environ.get('WATCHED_TABLE', 'MovieRecommender_Watched'))
 activity_table = dynamodb.Table(os.environ.get('ACTIVITY_TABLE', 'MovieRecommender_Activity'))
+reviews_table = dynamodb.Table(os.environ.get('REVIEWS_TABLE', 'Reviews'))
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
@@ -44,6 +45,10 @@ def lambda_handler(event, context):
             return handle_delete_account(event)
         elif path.endswith('/user/activity') and http_method == 'GET':
             return handle_get_activity(event)
+        elif path.endswith('/user-data/reviews') and http_method == 'POST':
+            return handle_add_review(event)
+        elif path.endswith('/user-data/reviews') and http_method == 'GET':
+            return handle_get_reviews(event)
         else:
             return build_response(404, {'error': 'Not found'})
     
@@ -495,3 +500,71 @@ def build_response(status_code, body):
         },
         'body': json.dumps(body)
     } 
+    
+def handle_add_review(event):
+    """
+    Handle add review request
+    """
+    try:
+        # Verify JWT token
+        user = get_authenticated_user(event)
+        if not user:
+            return build_response(401, {'error': 'Authentication required'})
+        
+        # Parse request body
+        request_body = json.loads(event.get('body', '{}'))
+        movie_id = request_body.get('movieId')
+        rating = request_body.get('rating')
+        
+        if not movie_id:
+            return build_response(400, {'error': 'Movie ID is required'})
+        
+        user_id = user.get('user_id')
+        timestamp = int(time.time())
+
+        # Add to reviews table
+        reviews_table.put_item(
+            Item={
+                'user_id': user_id,
+                'movie_id': movie_id,
+                'rating': rating,
+                'timestamp': timestamp
+            }
+        )
+        
+        # Log activity
+        log_user_activity(user_id, 'add_review', {'movie_id': movie_id, 'rating': rating})
+
+        return build_response(200, {'message': 'Review added successfully'})
+
+    except Exception as e:
+        print(f"Add review error: {str(e)}")
+        return build_response(500, {'error': 'Error adding review'})
+
+def handle_get_reviews(event):
+    """
+    Handle get reviews request
+    """
+    try:
+        # Verify JWT token
+        user = get_authenticated_user(event)
+        if not user:
+            return build_response(401, {'error': 'Authentication required'})
+        
+        user_id = user.get('user_id')
+
+        # Query reviews table for user's reviews
+        response = reviews_table.query(
+            KeyConditionExpression=Key('user_id').eq(user_id)
+        )
+
+        review_items = response.get('Items', [])
+
+        # Format response
+        return build_response(200, {
+            'reviews': review_items
+        })
+
+    except Exception as e:
+        print(f"Get reviews error: {str(e)}")
+        return build_response(500, {'error': 'Error getting reviews'})
