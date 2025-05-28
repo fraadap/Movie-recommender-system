@@ -39,6 +39,8 @@ def lambda_handler(event, context):
             return handle_get_watched(event)
         elif path.endswith('/user-data/watched') and http_method == 'POST':
             return handle_add_watched(event)
+        elif path.endswith('/user-data/watched/toggle') and http_method == 'POST':
+            return handle_toggle_watched(event)
         elif '/user-data/watched/' in path and http_method == 'DELETE':
             return handle_remove_watched(event)
         elif path.endswith('/user/account') and http_method == 'DELETE':
@@ -188,41 +190,9 @@ def handle_toggle_favorite(event):
         
         is_favorite = 'Item' in response
         
-        if is_favorite:
-            # Remove from favorites
-            favorites_table.delete_item(
-                Key={
-                    'user_id': user_id,
-                    'movie_id': movie_id
-                }
-            )
-            
-            # Log activity
-            log_user_activity(user_id, 'remove_favorite', {'movie_id': movie_id})
-            
-            return build_response(200, {
-                'isFavorite': False,
-                'message': 'Movie removed from favorites'
-            })
-        else:
-            # Add to favorites
-            timestamp = int(time.time())
-            
-            favorites_table.put_item(
-                Item={
-                    'user_id': user_id,
-                    'movie_id': movie_id,
-                    'created_at': timestamp
-                }
-            )
-            
-            # Log activity
-            log_user_activity(user_id, 'add_favorite', {'movie_id': movie_id})
-            
-            return build_response(200, {
-                'isFavorite': True,
-                'message': 'Movie added to favorites'
-            })
+        return build_response(200, {
+            'isFavorite': is_favorite
+        })
     
     except Exception as e:
         print(f"Toggle favorite error: {str(e)}")
@@ -338,6 +308,43 @@ def handle_remove_watched(event):
     except Exception as e:
         print(f"Remove watched movie error: {str(e)}")
         return build_response(500, {'error': 'Error removing watched movie'})
+    
+def handle_toggle_watched(event):
+    """
+    Check if a movie is in the user's watched list
+    """
+    try:
+        # Verify JWT token
+        user = get_authenticated_user(event)
+        if not user:
+            return build_response(401, {'error': 'Authentication required'})
+        
+        # Parse request body
+        request_body = json.loads(event.get('body', '{}'))
+        movie_id = request_body.get('movieId')
+        
+        if not movie_id:
+            return build_response(400, {'error': 'Movie ID is required'})
+        
+        user_id = user.get('user_id')
+        
+        # Check if movie is already watched
+        response = watched_table.get_item(
+            Key={
+                'user_id': user_id,
+                'movie_id': movie_id
+            }
+        )
+        
+        is_watched = 'Item' in response
+        
+        return build_response(200, {
+            'isWatched': is_watched
+        })
+    
+    except Exception as e:
+        print(f"Toggle watched error: {str(e)}")
+        return build_response(500, {'error': 'Error toggling watched'})
 
 def handle_delete_account(event):
     """
