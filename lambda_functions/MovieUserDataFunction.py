@@ -33,13 +33,13 @@ def lambda_handler(event, context):
             return handle_add_favorite(event)
         elif '/user-data/favorites/' in path and http_method == 'DELETE':
             return handle_remove_favorite(event)
-        elif path.endswith('/user-data/favorites/toggle') and http_method == 'POST':
+        elif '/user-data/favorites/toggle/' in path and http_method == 'GET':
             return handle_toggle_favorite(event)
         elif path.endswith('/user-data/watched') and http_method == 'GET':
             return handle_get_watched(event)
         elif path.endswith('/user-data/watched') and http_method == 'POST':
             return handle_add_watched(event)
-        elif path.endswith('/user-data/watched/toggle') and http_method == 'POST':
+        elif '/user-data/watched/toggle/' in path and http_method == 'GET':
             return handle_toggle_watched(event)
         elif '/user-data/watched/' in path and http_method == 'DELETE':
             return handle_remove_watched(event)
@@ -171,10 +171,8 @@ def handle_toggle_favorite(event):
         if not user:
             return build_response(401, {'error': 'Authentication required'})
         
-        # Parse request body
-        request_body = json.loads(event.get('body', '{}'))
-        movie_id = request_body.get('movieId')
-        
+        path = event.get('path', '')
+        movie_id = path.split('/')[-1]
         if not movie_id:
             return build_response(400, {'error': 'Movie ID is required'})
         
@@ -319,9 +317,11 @@ def handle_toggle_watched(event):
         if not user:
             return build_response(401, {'error': 'Authentication required'})
         
-        # Parse request body
-        request_body = json.loads(event.get('body', '{}'))
-        movie_id = request_body.get('movieId')
+        # Extract movie_id from path
+        path = event.get('path', '')
+        movie_id = path.split('/')[-1]
+        if not movie_id:
+            return build_response(400, {'error': 'Movie ID is required'})
         
         if not movie_id:
             return build_response(400, {'error': 'Movie ID is required'})
