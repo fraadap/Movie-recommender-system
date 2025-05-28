@@ -11,7 +11,6 @@ dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
 favorites_table = dynamodb.Table(os.environ.get('FAVORITES_TABLE', 'MovieRecommender_Favorites'))
 watched_table = dynamodb.Table(os.environ.get('WATCHED_TABLE', 'MovieRecommender_Watched'))
-preferences_table = dynamodb.Table(os.environ.get('PREFERENCES_TABLE', 'MovieRecommender_Preferences'))
 activity_table = dynamodb.Table(os.environ.get('ACTIVITY_TABLE', 'MovieRecommender_Activity'))
 
 # JWT secret - in production, use AWS Secrets Manager
@@ -41,10 +40,6 @@ def lambda_handler(event, context):
             return handle_add_watched(event)
         elif '/user-data/watched/' in path and http_method == 'DELETE':
             return handle_remove_watched(event)
-        elif path.endswith('/user/preferences') and http_method == 'GET':
-            return handle_get_preferences(event)
-        elif path.endswith('/user/preferences') and http_method == 'PUT':
-            return handle_update_preferences(event)
         elif path.endswith('/user/account') and http_method == 'DELETE':
             return handle_delete_account(event)
         elif path.endswith('/user/activity') and http_method == 'GET':
@@ -339,96 +334,6 @@ def handle_remove_watched(event):
         print(f"Remove watched movie error: {str(e)}")
         return build_response(500, {'error': 'Error removing watched movie'})
 
-def handle_get_preferences(event):
-    """
-    Handle get user preferences request
-    """
-    try:
-        # Verify JWT token
-        user = get_authenticated_user(event)
-        if not user:
-            return build_response(401, {'error': 'Authentication required'})
-        
-        user_id = user.get('user_id')
-        
-        # Get preferences from preferences table
-        response = preferences_table.get_item(
-            Key={'user_id': user_id}
-        )
-        
-        preferences = response.get('Item', {
-            'user_id': user_id,
-            'email_notifications': True,
-            'auto_recommendations': True,
-            'dark_mode': False
-        })
-        
-        # Format response
-        return build_response(200, preferences)
-    
-    except Exception as e:
-        print(f"Get preferences error: {str(e)}")
-        return build_response(500, {'error': 'Error getting preferences'})
-
-def handle_update_preferences(event):
-    """
-    Handle update user preferences request
-    """
-    try:
-        # Verify JWT token
-        user = get_authenticated_user(event)
-        if not user:
-            return build_response(401, {'error': 'Authentication required'})
-        
-        # Parse request body
-        request_body = json.loads(event.get('body', '{}'))
-        email_notifications = request_body.get('emailNotifications')
-        auto_recommendations = request_body.get('autoRecommendations')
-        dark_mode = request_body.get('darkMode')
-        
-        user_id = user.get('user_id')
-        timestamp = int(time.time())
-        
-        # Update preferences in preferences table
-        update_expression_parts = ['updated_at = :u']
-        expression_attribute_values = {':u': timestamp}
-        
-        if email_notifications is not None:
-            update_expression_parts.append('email_notifications = :e')
-            expression_attribute_values[':e'] = email_notifications
-        
-        if auto_recommendations is not None:
-            update_expression_parts.append('auto_recommendations = :a')
-            expression_attribute_values[':a'] = auto_recommendations
-        
-        if dark_mode is not None:
-            update_expression_parts.append('dark_mode = :d')
-            expression_attribute_values[':d'] = dark_mode
-        
-        update_expression = 'SET ' + ', '.join(update_expression_parts)
-        
-        preferences_table.update_item(
-            Key={'user_id': user_id},
-            UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_attribute_values
-        )
-        
-        # Get updated preferences
-        response = preferences_table.get_item(
-            Key={'user_id': user_id}
-        )
-        
-        updated_preferences = response.get('Item', {})
-        
-        # Log activity
-        log_user_activity(user_id, 'update_preferences', request_body)
-        
-        return build_response(200, updated_preferences)
-    
-    except Exception as e:
-        print(f"Update preferences error: {str(e)}")
-        return build_response(500, {'error': 'Error updating preferences'})
-
 def handle_delete_account(event):
     """
     Handle delete account request
@@ -474,11 +379,6 @@ def handle_delete_account(event):
                         'movie_id': movie.get('movie_id')
                     }
                 )
-            
-            # Delete preferences
-            preferences_table.delete_item(
-                Key={'user_id': user_id}
-            )
             
             # Delete activity log
             activity_records = activity_table.query(
