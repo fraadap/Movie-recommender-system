@@ -10,7 +10,6 @@ from botocore.exceptions import ClientError
 dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
 favorites_table = dynamodb.Table(os.environ.get('FAVORITES_TABLE', 'MovieRecommender_Favorites'))
-watched_table = dynamodb.Table(os.environ.get('WATCHED_TABLE', 'MovieRecommender_Watched'))
 activity_table = dynamodb.Table(os.environ.get('ACTIVITY_TABLE', 'MovieRecommender_Activity'))
 reviews_table = dynamodb.Table(os.environ.get('REVIEWS_TABLE', 'Reviews'))
 
@@ -35,14 +34,6 @@ def lambda_handler(event, context):
             return handle_remove_favorite(event)
         elif '/user-data/favorites/toggle/' in path and http_method == 'GET':
             return handle_toggle_favorite(event)
-        elif path.endswith('/user-data/watched') and http_method == 'GET':
-            return handle_get_watched(event)
-        elif path.endswith('/user-data/watched') and http_method == 'POST':
-            return handle_add_watched(event)
-        elif '/user-data/watched/toggle/' in path and http_method == 'GET':
-            return handle_toggle_watched(event)
-        elif '/user-data/watched/' in path and http_method == 'DELETE':
-            return handle_remove_watched(event)
         elif path.endswith('/user/account') and http_method == 'DELETE':
             return handle_delete_account(event)
         elif path.endswith('/user/activity') and http_method == 'GET':
@@ -51,6 +42,10 @@ def lambda_handler(event, context):
             return handle_add_review(event)
         elif path.endswith('/user-data/reviews') and http_method == 'GET':
             return handle_get_reviews(event)
+        elif '/user-data/reviews/toggle/' in path and http_method == 'GET':
+            return handle_toggle_reviewed(event)
+        elif '/user-data/reviews/' in path and http_method == 'DELETE':
+            return handle_remove_review(event)
         else:
             return build_response(404, {'error': 'Not found'})
     
@@ -196,83 +191,9 @@ def handle_toggle_favorite(event):
         print(f"Toggle favorite error: {str(e)}")
         return build_response(500, {'error': 'Error toggling favorite'})
 
-def handle_get_watched(event):
+def handle_remove_review(event):
     """
-    Handle get watched movies request
-    """
-    try:
-        # Verify JWT token
-        user = get_authenticated_user(event)
-        if not user:
-            return build_response(401, {'error': 'Authentication required'})
-        
-        user_id = user.get('user_id')
-        
-        # Query watched table for user's watched movies
-        response = watched_table.query(
-            KeyConditionExpression=Key('user_id').eq(user_id)
-        )
-        
-        watched_items = response.get('Items', [])
-        
-        # Format response
-        return build_response(200, {
-            'movies': watched_items
-        })
-    
-    except Exception as e:
-        print(f"Get watched movies error: {str(e)}")
-        return build_response(500, {'error': 'Error getting watched movies'})
-
-def handle_add_watched(event):
-    """
-    Handle add watched movie request
-    """
-    try:
-        # Verify JWT token
-        user = get_authenticated_user(event)
-        if not user:
-            return build_response(401, {'error': 'Authentication required'})
-        
-        # Parse request body
-        request_body = json.loads(event.get('body', '{}'))
-        movie_id = request_body.get('movieId')
-        rating = request_body.get('rating')
-        
-        if not movie_id:
-            return build_response(400, {'error': 'Movie ID is required'})
-        
-        user_id = user.get('user_id')
-        timestamp = int(time.time())
-        
-        # Add to watched table
-        item = {
-            'user_id': user_id,
-            'movie_id': movie_id,
-            'watched_at': timestamp
-        }
-        
-        if rating is not None:
-            item['rating'] = rating
-        
-        watched_table.put_item(Item=item)
-        
-        # Log activity
-        activity_data = {'movie_id': movie_id}
-        if rating is not None:
-            activity_data['rating'] = rating
-        
-        log_user_activity(user_id, 'add_watched', activity_data)
-        
-        return build_response(200, {'message': 'Movie added to watched list'})
-    
-    except Exception as e:
-        print(f"Add watched movie error: {str(e)}")
-        return build_response(500, {'error': 'Error adding watched movie'})
-
-def handle_remove_watched(event):
-    """
-    Handle remove watched movie request
+    Handle remove review request
     """
     try:
         # Verify JWT token
@@ -290,8 +211,8 @@ def handle_remove_watched(event):
         
         user_id = user.get('user_id')
         
-        # Remove from watched table
-        watched_table.delete_item(
+        # Remove from reviews table
+        reviews_table.delete_item(
             Key={
                 'user_id': user_id,
                 'movie_id': movie_id
@@ -299,17 +220,17 @@ def handle_remove_watched(event):
         )
         
         # Log activity
-        log_user_activity(user_id, 'remove_watched', {'movie_id': movie_id})
-        
-        return build_response(200, {'message': 'Movie removed from watched list'})
+        log_user_activity(user_id, 'remove_review', {'movie_id': movie_id})
+
+        return build_response(200, {'message': 'Movie removed from reviews'})
     
     except Exception as e:
-        print(f"Remove watched movie error: {str(e)}")
-        return build_response(500, {'error': 'Error removing watched movie'})
+        print(f"Remove reviewed movie error: {str(e)}")
+        return build_response(500, {'error': 'Error removing reviewed movie'})
     
-def handle_toggle_watched(event):
+def handle_toggle_reviewed(event):
     """
-    Check if a movie is in the user's watched list
+    Check if a movie is in the user's reviewed list
     """
     try:
         # Verify JWT token
@@ -328,23 +249,23 @@ def handle_toggle_watched(event):
         
         user_id = user.get('user_id')
         
-        # Check if movie is already watched
-        response = watched_table.get_item(
+        # Check if movie is already reviewed
+        response = reviews_table.get_item(
             Key={
                 'user_id': user_id,
                 'movie_id': movie_id
             }
         )
         
-        is_watched = 'Item' in response
+        is_reviewed = 'Item' in response
         
         return build_response(200, {
-            'isWatched': is_watched
+            'isReviewed': is_reviewed
         })
     
     except Exception as e:
-        print(f"Toggle watched error: {str(e)}")
-        return build_response(500, {'error': 'Error toggling watched'})
+        print(f"Toggle reviewed error: {str(e)}")
+        return build_response(500, {'error': 'Error toggling reviewed'})
 
 def handle_delete_account(event):
     """
@@ -376,32 +297,6 @@ def handle_delete_account(event):
                     Key={
                         'user_id': user_id,
                         'movie_id': favorite.get('movie_id')
-                    }
-                )
-            
-            # Delete all watched movies
-            watched_movies = watched_table.query(
-                KeyConditionExpression=Key('user_id').eq(user_id)
-            ).get('Items', [])
-            
-            for movie in watched_movies:
-                watched_table.delete_item(
-                    Key={
-                        'user_id': user_id,
-                        'movie_id': movie.get('movie_id')
-                    }
-                )
-            
-            # Delete activity log
-            activity_records = activity_table.query(
-                KeyConditionExpression=Key('user_id').eq(user_id)
-            ).get('Items', [])
-            
-            for record in activity_records:
-                activity_table.delete_item(
-                    Key={
-                        'user_id': user_id,
-                        'timestamp': record.get('timestamp')
                     }
                 )
             
