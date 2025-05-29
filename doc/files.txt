@@ -1,0 +1,178 @@
+Project Overview: Movie Recommender System
+==========================================
+
+This is a complete serverless movie recommendation system built on AWS, featuring semantic search, 
+collaborative filtering, user management, and a modern Vue.js frontend.
+
+BACKEND STRUCTURE:
+===================
+
+lambda_functions/MovieAuthFunction.py:
+- Handles user authentication and registration
+- JWT token generation and validation
+- Password hashing and security
+- User account management endpoints (/auth/login, /auth/register, /auth/refresh)
+
+lambda_functions/MovieUserDataFunction.py:
+- Manages user behavioral data and preferences
+- Favorites list management
+- User reviews and ratings
+- Activity tracking and user account info
+- Endpoints: /user-data/favorites, /user-data/reviews, /user/activity, /user/account
+
+lambda_functions/search_lambda_router.py:
+- Main router for search and recommendation endpoints
+- Handles API Gateway integration and request routing
+- Coordinates between search algorithms and data sources
+- Endpoints: /search, /content, /collaborative, /similar
+
+lambda_functions/search_lambda.py:
+- Core recommendation algorithms implementation
+- Semantic search using sentence transformers embeddings
+- Content-based filtering using movie similarity
+- Collaborative filtering based on user ratings
+- Machine learning logic and similarity calculations
+
+SETUP AND CONFIGURATION:
+========================
+
+initial_setup/create_table.py:
+- Creates all 7 DynamoDB tables required by the system
+- Movies, Reviews, MovieRecommender_Users, MovieRecommender_Favorites
+- MovieRecommender_Watched, MovieRecommender_Preferences, MovieRecommender_Activity
+- Configures indexes and table settings
+
+initial_setup/data_processor.py:
+- Processes Kaggle movie dataset (movies_metadata.csv, credits.csv, ratings.csv)
+- Cleans and transforms data for DynamoDB storage
+- Handles ~45,000 movies and ~26M ratings
+- Extracts cast, crew, and metadata information
+
+initial_setup/generate_embeddings.py:
+- Generates 384-dimensional embeddings for all movies
+- Uses sentence-transformers/all-MiniLM-L6-v2 model
+- Combines title, overview, genres, cast, and directors into descriptive text
+- Uploads embeddings to S3 for fast similarity search
+
+initial_setup/api_gateway_setup.py:
+- Automated API Gateway configuration script
+- Creates REST API with all required endpoints
+- Configures Lambda integrations and CORS
+- Sets up permissions and deploys to production stage
+
+initial_setup/config.py:
+- Configuration settings for setup scripts
+- Environment variables and AWS resource names
+- Database connection parameters
+
+UTILITIES:
+==========
+
+utils/database.py:
+- DynamoDB helper functions and connection utilities
+- Common database operations for all Lambda functions
+- Error handling and retry logic
+- Table scanning and querying utilities
+
+utils/utils_function.py:
+- Shared utility functions across Lambda functions
+- JSON response formatting
+- Error handling and logging utilities
+- Common validation and data processing functions
+
+requirements.txt:
+- Python dependencies for all backend components
+- Includes boto3, sentence-transformers, pandas, numpy
+- JWT handling, bcrypt for password hashing
+- AWS SDK and data processing libraries
+
+FRONTEND STRUCTURE:
+==================
+
+frontend/src/App.vue:
+- Main Vue.js application component
+- Root component that holds the entire app structure
+- Global styling and layout management
+
+frontend/src/main.js:
+- Application entry point and configuration
+- Vue app initialization with router and store
+- Global plugin and component registration
+
+frontend/src/components/:
+- Reusable UI components for the application
+- HeaderBar.vue: Navigation header with user menu
+- FooterBar.vue: Application footer with links
+- MovieCard.vue: Movie display card for lists and grids
+- MovieDetail.vue: Detailed movie information component
+- LoadingSpinner.vue: Loading state indicator
+- NotificationSystem.vue: Toast notifications and alerts
+- Sidebar.vue: Navigation sidebar with filters
+- UserDataLoader.vue: Component for loading user-specific data
+
+frontend/src/views/:
+- Main application pages and views
+- Home.vue: Homepage with search and featured movies
+- Search.vue: Search results and filtering interface
+- MovieDetail.vue: Full movie details page
+- Login.vue: User login form and authentication
+- Register.vue: User registration form
+- Profile.vue: User profile management and settings
+- Favorites.vue: User's favorite movies list
+
+frontend/src/store/:
+- Vuex state management for application data
+- index.js: Main store configuration and modules
+- modules/auth.js: Authentication state and user data
+- modules/movies.js: Movie data, search results, and recommendations
+- modules/ui.js: UI state, notifications, and loading states
+
+frontend/src/services/:
+- API integration and external service communication
+- api.js: HTTP client for backend API communication
+- syncService.js: Data synchronization between frontend and backend
+
+frontend/src/router/:
+- Vue Router configuration for single-page application
+- index.js: Route definitions, navigation guards, and lazy loading
+
+frontend/src/utils/:
+- Frontend utility functions and helpers
+- errorHandler.js: Centralized error handling and user feedback
+
+frontend/package.json:
+- Node.js dependencies and build scripts
+- Vue.js, Vuex, Vue Router, Axios for HTTP requests
+- SCSS for styling, development and build tools
+
+DOCUMENTATION:
+==============
+
+doc/README.md:
+- Complete project setup and usage guide
+- API endpoint documentation
+- Database schema and architecture overview
+- Local development and testing instructions
+
+doc/DEPLOYMENT_GUIDE.md:
+- Step-by-step AWS deployment instructions
+- Infrastructure setup and configuration
+- Lambda function deployment and API Gateway setup
+- Monitoring, troubleshooting, and maintenance procedures
+
+doc/api.yaml:
+- OpenAPI 3.0 specification for all endpoints
+- Complete API documentation with request/response schemas
+- Authentication requirements and error responses
+- Integration documentation for frontend developers
+
+doc/PROJECT_DOCUMENTATION.tex:
+- Comprehensive technical documentation in LaTeX format
+- Architecture diagrams and system design details
+- Algorithm explanations and implementation details
+- Academic-style documentation for technical review
+
+doc/files.txt:
+- This file - complete project structure overview
+- File-by-file description of functionality
+- Organization and relationship between components

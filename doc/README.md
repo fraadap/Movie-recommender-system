@@ -1,401 +1,243 @@
-# Movie Recommender Data Ingestion
+# Movie Recommender System
 
 ## Overview
-This module contains scripts to create the DynamoDB table and to process and upload movie metadata and credits into the table.
+A comprehensive cloud-based movie recommendation system built on AWS, featuring semantic search, content-based filtering, collaborative filtering, and user management capabilities. The system provides personalized movie recommendations through advanced AI embeddings and machine learning algorithms.
+
+## Architecture
+- **Backend**: AWS Lambda functions for serverless computing
+- **Database**: DynamoDB for scalable data storage
+- **Search**: Semantic search using SentenceTransformers embeddings stored in S3
+- **API**: API Gateway for RESTful endpoints
+- **Frontend**: Vue.js web application
+- **Authentication**: JWT-based user authentication
 
 ## Prerequisites
 - Python 3.9+
-- AWS credentials configured (e.g., via `~/.aws/credentials` or environment variables)
-- Installed dependencies: `pip install -r requirements.txt`
+- Node.js 14+ (for frontend)
+- AWS CLI configured with appropriate credentials
+- AWS account with permissions for DynamoDB, Lambda, S3, and API Gateway
+- Install dependencies: `pip install -r requirements.txt`
 
 ## Dataset
-Download the following CSV files from Kaggle and place them in this directory:
+Download the following CSV files from Kaggle and place them in the `initial_setup` directory:
 - `movies_metadata.csv`
 - `credits.csv`
+- `ratings_small.csv` (or `ratings.csv` for full dataset)
 
 Kaggle dataset: https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset
 
-## Setup DynamoDB Table
-Run the script to create the `Movies` table in DynamoDB:
+## Quick Start Guide
 
-```
+### 1. Initial Setup
+
+Navigate to the `initial_setup` directory and create DynamoDB tables:
+
+```cmd
+cd initial_setup
 python create_table.py
 ```
 
-No additional configuration needed; the table uses on-demand billing.
+This creates the following tables:
+- `Movies` - Movie metadata and details
+- `Reviews` - User ratings and reviews
+- `MovieRecommender_Users` - User accounts
+- `MovieRecommender_Favorites` - User favorite movies
+- `MovieRecommender_Activity` - User activity logs
 
-## Data Processing and Upload
-Once the table is created and the CSV files are present, run:
+### 2. Data Processing and Upload
 
-```
+Process and upload movie data to DynamoDB:
+
+```cmd
 python data_processor.py
 ```
 
 This will:
-1. Parse `credits.csv` and extract top 5 actors and director(s).
-2. Parse `movies_metadata.csv`, enrich with year, genres, budget, poster path.
-3. Upload each movie item to the DynamoDB `Movies` table.
+1. Parse `credits.csv` and extract top 5 actors and directors
+2. Parse `movies_metadata.csv`, enrich with genres, budget, and poster paths
+3. Process `ratings_small.csv` for user reviews
+4. Upload all data to respective DynamoDB tables
 
-## DynamoDB Schema
+### 3. Generate and Upload Embeddings
+
+Generate semantic embeddings for movies and upload to S3:
+
+```cmd
+set EMBEDDINGS_BUCKET=your-movie-embeddings-bucket
+python generate_embeddings.py
+```
+
+This creates embeddings using `sentence-transformers/all-MiniLM-L6-v2` model.
+
+### 4. Deploy Lambda Functions
+
+Package and deploy the Lambda functions (see DEPLOYMENT_GUIDE.md for detailed steps):
+
+```cmd
+REM Create packages for each Lambda function
+python api_gateway_setup.py --region your-region
+```
+
+### 5. Access the API
+
+Once deployed, you can access the API endpoints for:
+- Semantic movie search
+- Content-based recommendations
+- Collaborative filtering recommendations
+- User authentication and management
+
+## Database Schema
+
+### Movies Table
 - **Partition Key**: `movie_id` (string)
 - **Attributes**:
-  - `title` (string)
-  - `overview` (string)
-  - `release_year` (number)
-  - `genres` (list of strings)
-  - `actors` (list of strings)
-  - `directors` (list of strings)
-  - `vote_average` (number)
-  - `vote_count` (number)
-  - `budget` (number)
-  - `poster_path` (string)
+  - `title` (string) - Movie title
+  - `overview` (string) - Movie description
+  - `release_year` (number) - Year of release
+  - `genres` (list) - List of genre strings
+  - `actors` (list) - Top 5 actors
+  - `directors` (list) - Director names
+  - `vote_average` (number) - Average rating
+  - `vote_count` (number) - Number of votes
+  - `budget` (number) - Movie budget
+  - `poster_path` (string) - Poster image path
+  - `adult` (boolean) - Adult content flag
+  - `popularity` (number) - Popularity score
 
-## Embedding Generation
-After ingesting movies and reviews into DynamoDB, you can generate semantic embeddings for each movie and optionally upload them to S3.
+### Reviews Table
+- **Partition Key**: `user_id` (string)
+- **Sort Key**: `movie_id` (string)
+- **Global Secondary Index**: `MovieIndex` (movie_id as partition key)
+- **Attributes**:
+  - `rating` (number) - User rating (1-5)
+  - `timestamp` (number) - Unix timestamp
 
-### Prerequisites
-- Ensure dependencies are installed: `pip install -r requirements.txt`
-- The script uses `sentence-transformers/all-MiniLM-L6-v2` by default, customize with `EMBEDDING_MODEL`.
-- If uploading to S3, you must have a bucket created and permissions configured.
+### User Tables
+- **MovieRecommender_Users**: User account information
+- **MovieRecommender_Favorites**: User favorite movies
+- **MovieRecommender_Activity**: User activity logs
 
-### Environment Variables
-- `MOVIES_CSV`: path to `movies_metadata.csv` (default: `movies_metadata.csv`)
-- `CREDITS_CSV`: path to `credits.csv` (default: `credits.csv`)
-- `EMBEDDINGS_OUTPUT_FILE`: file name for local JSONL output (default: `embeddings.jsonl`)
-- `EMBEDDING_MODEL`: name of the SentenceTransformer model (default: `sentence-transformers/all-MiniLM-L6-v2`)
-- `EMBEDDINGS_BUCKET`: name of the S3 bucket to upload embeddings (optional)
-- `S3_ENDPOINT_URL`: custom S3 endpoint (for local testing/minio, optional)
+## API Endpoints
 
-### Usage
-```bash
-# Generate embeddings locally (writes to embeddings.jsonl)
-python generate_embeddings.py
+The system provides several Lambda functions accessible through API Gateway:
 
-# Upload to S3 (set EMBEDDINGS_BUCKET)
-export EMBEDDINGS_BUCKET=<your-bucket-name>
-python generate_embeddings.py
-```
+### Search and Recommendations (`search_lambda_router.py`)
+- **POST /search** - Semantic search using AI embeddings
+- **POST /content** - Content-based recommendations
+- **POST /collaborative** - Collaborative filtering (requires authentication)
+- **POST /similar** - Find similar movies
 
-## Next Steps
-- Generate embeddings for each movie and upload to S3.
-- Implement AWS Lambda functions for semantic search and recommendation.
+### Authentication (`MovieAuthFunction.py`)
+- **POST /auth/login** - User login
+- **POST /auth/register** - User registration
+- **POST /auth/refresh** - Refresh JWT token
 
-## Local Testing without AWS Costs
-To avoid AWS charges, you can run DynamoDB locally or use a mock library:
+### User Data Management (`MovieUserDataFunction.py`)
+- **GET /user-data/favorites** - Get user's favorite movies
+- **POST /user-data/favorites** - Add movie to favorites
+- **DELETE /user-data/favorites/{movieId}** - Remove from favorites
+- **GET /user-data/favorites/toggle/{movieId}** - Check favorite status
+- **GET /user-data/reviews** - Get user's reviews
+- **POST /user-data/reviews** - Add movie review
+- **DELETE /user-data/reviews/{movieId}** - Remove review
+- **GET /user-data/reviews/toggle/{movieId}** - Check review status
+- **GET /user/activity** - Get user activity history
+- **DELETE /user/account** - Delete user account
 
-### Using DynamoDB Local (CLI/Java or Docker)
-- Download the [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html) jar or run the Docker image:
-  ```bash
-  # Docker
-  docker run -d -p 8000:8000 --name dynamodb_local amazon/dynamodb-local
-  ```
-- Set the endpoint URL environment variable:
-  ```bash
-  # Linux/Mac
-  export DYNAMODB_ENDPOINT_URL=http://localhost:8000
-  # Windows (PowerShell)
-  $Env:DYNAMODB_ENDPOINT_URL = "http://localhost:8000"
-  ```
-- Create tables and upload data locally:
-  ```bash
-  python create_table.py         # Creates Movies and Reviews tables on local DynamoDB
-  python data_processor.py      # Uploads movies, credits, and ratings to local DynamoDB
-  ```
+See `api.yaml` for complete API documentation.
 
-### Using a Mock Library (Moto)
-- Install **moto**: `pip install moto`
-- Wrap your tests or scripts to use the moto server:
-  ```python
-  from moto import mock_dynamodb
-  @mock_dynamodb
-  def test_local_upload():
-      # initialize tables and run data_processor.py logic here
-      pass
-  ```
-
-Either approach lets you fully test ingestion and basic queries without incurring AWS costs.
-
-## Dataset Updates
-Also include `ratings.csv` (user reviews) in this directory before running `data_processor.py`. The script now:
-1. Processes `ratings.csv` and uploads to the `Reviews` table.
-2. Handles `movies_metadata.csv` and `credits.csv` as before.
-
-## Lambda: Search & Recommendations
-A Lambda function (`search_lambda.py`) supports three operations via the `operation` field in the event:
-
-- **Semantic Search** (`operation="search"`):
-  ```json
-  {
-    "operation": "search",
-    "query": "Sci-fi adventure",
-    "top_k": 10
-  }
-  ```
-- **Content‑Based Filtering** (`operation="content"`):
-  ```json
-  {
-    "operation": "content",
-    "movie_ids": ["1", "2"],
-    "top_k": 10
-  }
-  ```
-- **Collaborative Filtering** (`operation="collaborative"`):
-  ```json
-  {
-    "operation": "collaborative",
-    "user_id": "42",
-    "top_k": 10
-  }
-  ```
-
-All responses return HTTP 200 and a JSON array of movie items enriched with a `score` field.
+## Environment Variables
 
 ### Lambda Environment Variables
-- `EMBEDDINGS_BUCKET`: S3 bucket name storing `embeddings.jsonl`
-- `EMBEDDINGS_OUTPUT_FILE`: embeddings file in S3 (default: `embeddings.jsonl`)
-- `EMBEDDING_MODEL`: SentenceTransformer model name (default: `sentence-transformers/all-MiniLM-L6-v2`)
-- `DYNAMODB_TABLE`: DynamoDB table for movies (default: `Movies`)
-- `REVIEWS_TABLE`: DynamoDB table for reviews (default: `Reviews`)
-- `DYNAMODB_ENDPOINT_URL`: (optional) custom DynamoDB endpoint (for local testing)
-- `S3_ENDPOINT_URL`: (optional) custom S3 endpoint (for local testing)
+Set these in your Lambda function configurations:
 
-## API Gateway Setup
+#### Search Lambda
+- `EMBEDDINGS_BUCKET`: S3 bucket storing embeddings
+- `EMBEDDINGS_OUTPUT_FILE`: Embeddings file name (default: `embeddings.jsonl`)
+- `EMBEDDING_MODEL`: SentenceTransformer model (default: `sentence-transformers/all-MiniLM-L6-v2`)
+- `DYNAMODB_TABLE`: Movies table name (default: `Movies`)
+- `REVIEWS_TABLE`: Reviews table name (default: `Reviews`)
 
-The system uses API Gateway to expose endpoints for frontend communication. The `api_gateway_setup.py` script automates the creation of a properly configured API Gateway:
+#### Auth Lambda
+- `JWT_SECRET`: Secret key for JWT tokens
+- `USERS_TABLE`: Users table name (default: `MovieRecommender_Users`)
 
-```bash
-# Deploy API Gateway with endpoints for search, content-based, and collaborative filtering
-python api_gateway_setup.py --region us-east-1 --lambda-name MovieSearchFunction
+#### User Data Lambda
+- `JWT_SECRET`: Secret key for JWT tokens
+- `USERS_TABLE`: Users table name
+- `FAVORITES_TABLE`: Favorites table name
+- `REVIEWS_TABLE`: Reviews table name
+- `ACTIVITY_TABLE`: Activity table name
+
+### Local Development Variables
+- `DYNAMODB_ENDPOINT_URL`: Custom DynamoDB endpoint (for local testing)
+- `S3_ENDPOINT_URL`: Custom S3 endpoint (for local testing)
+
+## Local Testing without AWS Costs
+
+You can test the system locally without incurring AWS charges:
+
+### Using DynamoDB Local
+```cmd
+REM Download and run DynamoDB Local using Docker
+docker run -d -p 8000:8000 --name dynamodb_local amazon/dynamodb-local
+
+REM Set environment variable for local endpoint
+set DYNAMODB_ENDPOINT_URL=http://localhost:8000
+
+REM Create tables and upload data locally
+python create_table.py
+python data_processor.py
 ```
 
-The script creates:
-- `/search` endpoint for semantic search
-- `/content` endpoint for content-based filtering
-- `/collaborative` endpoint for collaborative filtering
-- `/recommend` generic endpoint that routes based on the `operation` parameter
+### Using LocalStack for S3
+```cmd
+REM Run LocalStack for S3 simulation
+docker run -d -p 4566:4566 --name localstack localstack/localstack
 
-### CORS Configuration
+REM Set environment variables
+set S3_ENDPOINT_URL=http://localhost:4566
+set EMBEDDINGS_BUCKET=local-embeddings
 
-All endpoints are configured with CORS support to allow requests from web browsers. For development, CORS is set to allow requests from any origin (`*`), but in production, it should be limited to specific domains.
-
-### Throttling Settings
-
-The API is configured with the following throttling limits:
-- Rate limit: 100 requests per second
-- Burst limit: 200 requests
-
-You can modify these limits in the `api_gateway_setup.py` script.
-
-## Lambda Router
-
-The `search_lambda_router.py` script serves as a router for the Lambda function, handling requests from different API Gateway endpoints:
-
-```
-API Gateway → Lambda Router → Appropriate Search/Recommendation Function
+REM Generate embeddings locally
+python generate_embeddings.py
 ```
 
-The router:
-1. Extracts operation type (search/content/collaborative) from the path or request body
-2. Validates and transforms input parameters
-3. Calls the appropriate function in `search_lambda.py`
-4. Returns a properly formatted response with CORS headers
+## Project Structure
 
-### JSON Request Formats
-
-**For semantic search:**
-```json
-{
-  "query": "avventura nello spazio",
-  "top_k": 5
-}
+```
+Cloud-Computing/
+├── requirements.txt          # Python dependencies
+├── doc/                     # Documentation
+│   ├── README.md           # This file
+│   ├── DEPLOYMENT_GUIDE.md # Detailed deployment instructions
+│   └── api.yaml           # OpenAPI specification
+├── initial_setup/          # Setup and data processing scripts
+│   ├── create_table.py     # DynamoDB table creation
+│   ├── data_processor.py   # Data ingestion and processing
+│   ├── generate_embeddings.py # Generate AI embeddings
+│   ├── api_gateway_setup.py # API Gateway configuration
+│   └── config.py          # Configuration settings
+├── lambda_functions/       # AWS Lambda function code
+│   ├── search_lambda.py    # Core recommendation algorithms
+│   ├── search_lambda_router.py # API routing for search
+│   ├── MovieAuthFunction.py # User authentication
+│   └── MovieUserDataFunction.py # User data management
+├── utils/                  # Utility functions
+│   ├── database.py         # Database connections
+│   └── utils_function.py   # Common utilities
+└── frontend/               # Vue.js web application
+    ├── src/               # Source code
+    ├── components/        # Vue components
+    └── services/          # API services
 ```
 
-**For content-based filtering:**
-```json
-{
-  "movie_ids": ["123", "456", "789"],
-  "top_k": 10
-}
-```
+## Deployment
 
-**For collaborative filtering:**
-```json
-{
-  "user_id": "42",
-  "top_k": 8
-}
-```
+For complete deployment instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
-### Response Format
+For API documentation, see [api.yaml](api.yaml).
 
-```json
-{
-  "statusCode": 200,
-  "headers": {
-    "Access-Control-Allow-Origin": "*",
-    "Content-Type": "application/json"
-  },
-  "body": [
-    {
-      "movie_id": "123",
-      "title": "Interstellar",
-      "score": 0.87,
-      "release_year": 2014,
-      "genres": ["Adventure", "Drama", "Science Fiction"]
-    },
-    // more movies...
-  ]
-}
-```
+## Support
 
-## Frontend Integration
-
-To integrate with the API from a frontend application:
-
-```javascript
-// Example from a React application
-async function searchMovies(query) {
-  try {
-    const response = await fetch('https://your-api-id.execute-api.region.amazonaws.com/prod/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: query,
-        top_k: 10
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error('Network response was not ok');
-    }
-    
-    const movies = await response.json();
-    return movies;
-  } catch (error) {
-    console.error('Error searching movies:', error);
-    return [];
-  }
-}
-```
-
-After API Gateway deployment, the endpoint URLs will be saved to `api_info.json` for reference.
-
-## Deployment su AWS
-
-Di seguito i passaggi per far girare l'intero sistema in AWS, inclusi DynamoDB, S3, Lambda e API Gateway.
-
-### Prerequisiti AWS
-- AWS CLI configurato:
-  ```bash
-  aws configure
-  ```
-- IAM Role con permessi:
-  - DynamoDB: `CreateTable`, `DescribeTable`, `PutItem`, `GetItem`, `Query`
-  - S3: `CreateBucket`, `PutObject`, `GetObject`
-  - Lambda: `CreateFunction`, `UpdateFunctionCode`, `InvokeFunction`
-  - IAM: `PassRole`
-  - API Gateway: `CreateRestApi`, `CreateResource`, `PutMethod`, `Deploy`
-- Docker (opzionale, per packaging)
-
-### 1. Creazione delle Risorse AWS
-
-1. **S3** – Crea il bucket per le embedding:
-   ```bash
-   aws s3 mb s3://<EMBEDDINGS_BUCKET> --region <your-region>
-   ```
-
-2. **DynamoDB** – Esegui lo script per creare le tabelle:
-   ```bash
-   # Usa il profilo AWS configurato
-   python3 create_table.py
-   ```
-   Verranno create le tabelle `Movies` e `Reviews` in on‑demand mode.
-
-3. **Upload Dati** – Ingestione metadati, review ed embedding:
-   ```bash
-   # Metadati e reviews
-   python3 data_processor.py
-
-   # Genera embedding e upload su S3
-   export EMBEDDINGS_BUCKET=<EMBEDDINGS_BUCKET>
-   python3 generate_embeddings.py
-   ```
-
-### 2. Packaging e Creazione della Lambda
-
-#### 2.1 Creazione del package per Lambda
-```bash
-# Crea cartella di lavoro
-mkdir package && cd package
-# Installa dipendenze
-pip install -r ../requirements.txt -t .
-# Copia il codice della Lambda
-cp ../search_lambda.py .
-# Comprimi il package
-zip -r ../search_lambda.zip .
-cd ..
-```
-
-#### 2.2 Deploy della funzione Lambda
-```bash
-aws lambda create-function \
-  --function-name MovieSearchFunction \
-  --runtime python3.9 \
-  --role arn:aws:iam::<ACCOUNT_ID>:role/<LAMBDA_EXEC_ROLE> \
-  --handler search_lambda.lambda_handler \
-  --timeout 30 \
-  --memory-size 512 \
-  --zip-file fileb://search_lambda.zip \
-  --environment Variables='{ \
-      "EMBEDDINGS_BUCKET":"<EMBEDDINGS_BUCKET>", \
-      "EMBEDDINGS_OUTPUT_FILE":"embeddings.jsonl", \
-      "EMBEDDING_MODEL":"sentence-transformers/all-MiniLM-L6-v2", \
-      "DYNAMODB_TABLE":"Movies", \
-      "REVIEWS_TABLE":"Reviews" \
-  }'
-```
-
-### 3. Configurazione API Gateway
-
-1. **Crea REST API**:
-   ```bash
-   aws apigateway create-rest-api --name "MovieRecommenderAPI"
-   ```
-2. **Recupera l'ID della root resource** e crea la resource `/recommend`:
-   ```bash
-   aws apigateway get-resources --rest-api-id <api-id>
-   aws apigateway create-resource --rest-api-id <api-id> --parent-id <root-id> --path-part recommend
-   ```
-3. **Imposta metodo POST** e integrazione con Lambda:
-   ```bash
-   aws apigateway put-method --rest-api-id <api-id> --resource-id <rec-id> --http-method POST --authorization-type NONE
-   aws apigateway put-integration --rest-api-id <api-id> --resource-id <rec-id> --http-method POST --type AWS_PROXY --integration-http-method POST --uri arn:aws:apigateway:<region>:lambda:path/2015-03-31/functions/arn:aws:lambda:<region>:<account-id>:function:MovieSearchFunction/invocations
-   ```
-4. **Permetti a API Gateway di invocare la Lambda**:
-   ```bash
-   aws lambda add-permission --function-name MovieSearchFunction --statement-id apigateway-access --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn arn:aws:execute-api:<region>:<account-id>:<api-id>/*/POST/recommend
-   ```
-5. **Deploy** l'API:
-   ```bash
-   aws apigateway create-deployment --rest-api-id <api-id> --stage-name prod
-   ```
-
-### 4. Test dell'Endpoint
-
-Esegui una richiesta HTTP POST:
-```bash
-curl -X POST https://<api-id>.execute-api.<region>.amazonaws.com/prod/recommend \
-  -H "Content-Type: application/json" \
-  -d '{"operation":"search","query":"Inception","top_k":5}'
-```
-
-### Variabili d'ambiente della Lambda
-- `EMBEDDINGS_BUCKET` – bucket S3 per gli embedding
-- `EMBEDDINGS_OUTPUT_FILE` – file di embedding (`embeddings.jsonl`)
-- `EMBEDDING_MODEL` – modello per generare query embedding
-- `DYNAMODB_TABLE` – tabella DynamoDB per i film
-- `REVIEWS_TABLE` – tabella DynamoDB per le recensioni
-- `DYNAMODB_ENDPOINT_URL` – (opzionale, per testing locale)
-- `S3_ENDPOINT_URL` – (opzionale, per testing locale) 
+This system is designed for educational purposes as part of a Cloud Computing course. For issues or questions, refer to the documentation files in the `doc` directory.
