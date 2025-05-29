@@ -6,6 +6,7 @@ import jwt
 from boto3.dynamodb.conditions import Key
 import boto3
 
+from auth import get_cors_headers
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
@@ -150,13 +151,4 @@ def build_response(status_code, body):
         'statusCode': status_code,
         'headers': get_cors_headers(),
         'body': json.dumps(body)
-    }
-
-def get_cors_headers():
-    """Get CORS headers for responses"""
-    return {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-        'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
-        'Content-Type': 'application/json'
     }
