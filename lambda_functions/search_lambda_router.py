@@ -2,6 +2,16 @@ import json
 import os
 import search_lambda as search_engine
 import logging
+import jwt
+from boto3.dynamodb.conditions import Key
+import boto3
+
+# Initialize DynamoDB client
+dynamodb = boto3.resource('dynamodb')
+users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
+
+# JWT secret - in production, use AWS Secrets Manager
+JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -25,11 +35,7 @@ def lambda_handler(event, context):
             # Parse the body from API Gateway
             request_body = json.loads(event.get('body', '{}'))
         except json.JSONDecodeError:
-            return {
-                'statusCode': 400,
-                'headers': get_cors_headers(),
-                'body': json.dumps({'error': 'Invalid JSON in request body'})
-            }
+            return build_response(400, {'error': 'Invalid JSON in request body'})
     elif event.get('operation') or path == 'recommend':
         # Direct Lambda invocation or generic endpoint
         request_body = event
@@ -43,11 +49,7 @@ def lambda_handler(event, context):
     
     # If no operation found, return error
     if not operation:
-        return {
-            'statusCode': 400,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': 'Missing operation parameter'})
-        }
+        return build_response(400, {'error': 'Missing operation parameter'})
     
     # Extract common parameters
     top_k = int(request_body.get('top_k', 10))
@@ -57,7 +59,7 @@ def lambda_handler(event, context):
         if operation == 'search':
             query = request_body.get('query')
             if not query:
-                return error_response('Missing query parameter')
+                return build_response(400, {'error': 'Missing query parameter'})
             result = search_engine.recommend_semantic(query, top_k)
             
         elif operation == 'content':
@@ -70,26 +72,21 @@ def lambda_handler(event, context):
                 movie_ids = [single_movie_id]
                 
             if not movie_ids:
-                return error_response('Missing movie_ids parameter')
+                return build_response(400, {'error': 'Missing movie_ids parameter'})
                 
-            result = search_engine.recommend_content(movie_ids, top_k) 
+            result = search_engine.recommend_content(movie_ids, top_k)
             
         elif operation == 'collaborative':
-            # Support both user_id and movieId parameters
-            user_id = request_body.get('user_id')
-            movie_id = request_body.get('movie_id')
+            # Get authenticated user
+            user = get_authenticated_user(event)
+            if not user:
+                return build_response(401, {'error': 'Authentication required'})
             
-            # If movieId is provided but not user_id, use movieId as the parameter
-            if movie_id and not user_id:
-                user_id = movie_id
-                
-            if not user_id:
-                return error_response('Missing user_id or movie_id parameter')
-                
+            user_id = user.get('user_id')
             result = search_engine.recommend_collaborative(user_id, top_k)
             
         else:
-            return error_response(f'Invalid operation: {operation}')
+            return build_response(400, {'error': f'Invalid operation: {operation}'})
         
         # Load metadata for each result
         movies = []
@@ -100,19 +97,39 @@ def lambda_handler(event, context):
                 movies.append(movie)
         
         # Return successful response
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps(movies)
-        }
+        return build_response(200, movies)
         
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': get_cors_headers(),
-            'body': json.dumps({'error': f'Server error: {str(e)}'})
-        }
+        return build_response(500, {'error': f'Server error: {str(e)}'})
+
+def get_authenticated_user(event):
+    """
+    Get authenticated user from JWT token
+    """
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    
+    if not auth_header.startswith('Bearer '):
+        return None
+    
+    token = auth_header.split(' ')[1]
+    
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        email = payload.get('email')
+        
+        if not email:
+            return None
+        
+        # Get user from DynamoDB
+        response = users_table.get_item(
+            Key={'email': email}
+        )
+        
+        return response.get('Item')
+    except:
+        return None
 
 def get_movie_metadata(movie_id):
     """Fetch movie metadata from DynamoDB"""
@@ -125,12 +142,14 @@ def get_movie_metadata(movie_id):
         logger.error(f"Error fetching movie {movie_id}: {str(e)}")
         return None
 
-def error_response(message, status_code=400):
-    """Format an error response"""
+def build_response(status_code, body):
+    """
+    Build API Gateway response
+    """
     return {
         'statusCode': status_code,
         'headers': get_cors_headers(),
-        'body': json.dumps({'error': message})
+        'body': json.dumps(body)
     }
 
 def get_cors_headers():
@@ -140,4 +159,4 @@ def get_cors_headers():
         'Access-Control-Allow-Headers': 'Content-Type,Authorization',
         'Access-Control-Allow-Methods': 'OPTIONS,POST,GET',
         'Content-Type': 'application/json'
-    } 
+    }
