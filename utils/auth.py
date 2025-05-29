@@ -36,3 +36,32 @@ def generate_token(user):
     }
     
     return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+
+def get_authenticated_user(event):
+    """
+    Get authenticated user from JWT token
+    """
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    
+    if not auth_header.startswith('Bearer '):
+        return None
+    
+    token = auth_header.split(' ')[1]
+    
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        email = payload.get('email')
+        
+        if not email:
+            return None
+        
+        # Get user from DynamoDB
+        response = users_table.get_item(
+            Key={'email': email}
+        )
+        
+        return response.get('Item')
+    except:
+        return None
+

@@ -6,6 +6,9 @@ import jwt
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
+
+from utils.auth import get_authenticated_user
+
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
@@ -346,35 +349,6 @@ def handle_get_activity(event):
     except Exception as e:
         print(f"Get activity error: {str(e)}")
         return build_response(500, {'error': 'Error getting activity history'})
-
-# Helper functions
-def get_authenticated_user(event):
-    """
-    Get authenticated user from JWT token
-    """
-    headers = event.get('headers', {})
-    auth_header = headers.get('Authorization', '')
-    
-    if not auth_header.startswith('Bearer '):
-        return None
-    
-    token = auth_header.split(' ')[1]
-    
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-        email = payload.get('email')
-        
-        if not email:
-            return None
-        
-        # Get user from DynamoDB
-        response = users_table.get_item(
-            Key={'email': email}
-        )
-        
-        return response.get('Item')
-    except:
-        return None
 
 def log_user_activity(user_id, action, data=None):
     """

@@ -9,7 +9,7 @@ import time
 import jwt
 from botocore.exceptions import ClientError
 
-from auth import generate_token
+from utils.auth import generate_token
 
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
@@ -207,35 +207,6 @@ def handle_refresh(event):
     except Exception as e:
         print(f"Refresh token error: {str(e)}")
         return build_response(500, {'error': 'Error refreshing token'})
-
-# Helper functions
-def get_authenticated_user(event):
-    """
-    Get authenticated user from JWT token
-    """
-    headers = event.get('headers', {})
-    auth_header = headers.get('Authorization', '')
-    
-    if not auth_header.startswith('Bearer '):
-        return None
-    
-    token = auth_header.split(' ')[1]
-    
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-        email = payload.get('email')
-        
-        if not email:
-            return None
-        
-        # Get user from DynamoDB
-        response = users_table.get_item(
-            Key={'email': email}
-        )
-        
-        return response.get('Item')
-    except:
-        return None
 
 def generate_salt():
     """
