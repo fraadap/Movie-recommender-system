@@ -4,49 +4,9 @@ import os
 import time
 from boto3.dynamodb.conditions import Key
 
-from utils.utils_function import get_authenticated_user, build_response
-import utils.database as db 
-
-
-# JWT secret - in production, use AWS Secrets Manager
-JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
-
-def lambda_handler(event, context):
-    """
-    Main entry point for the User Data Lambda function
-    """
-    try:
-        # Extract path and HTTP method
-        path = event.get('path', '')
-        http_method = event.get('httpMethod', '')
-        
-        # Route request to appropriate handler
-        if path.endswith('/user-data/favorites') and http_method == 'GET':
-            return handle_get_favorites(event)
-        elif path.endswith('/user-data/favorites') and http_method == 'POST':
-            return handle_add_favorite(event)
-        elif '/user-data/favorites/' in path and http_method == 'DELETE':
-            return handle_remove_favorite(event)
-        elif '/user-data/favorites/toggle/' in path and http_method == 'GET':
-            return handle_toggle_favorite(event)
-        elif path.endswith('/user/account') and http_method == 'DELETE':
-            return handle_delete_account(event)
-        elif path.endswith('/user/activity') and http_method == 'GET':
-            return handle_get_activity(event)
-        elif path.endswith('/user-data/reviews') and http_method == 'POST':
-            return handle_add_review(event)
-        elif path.endswith('/user-data/reviews') and http_method == 'GET':
-            return handle_get_reviews(event)
-        elif '/user-data/reviews/toggle/' in path and http_method == 'GET':
-            return handle_toggle_reviewed(event)
-        elif '/user-data/reviews/' in path and http_method == 'DELETE':
-            return handle_remove_review(event)
-        else:
-            return build_response(404, {'error': 'Not found'})
-    
-    except Exception as e:
-        print(f"Error processing request: {str(e)}")
-        return build_response(500, {'error': 'Internal server error'})
+from utils.config import Config
+from utils.utils_function import get_authenticated_user, build_response, sanitize_input, log_user_activity
+import utils.database as db
 
 def handle_get_favorites(event):
     """
@@ -92,10 +52,9 @@ def handle_add_favorite(event):
         user = get_authenticated_user(event)
         if not user:
             return build_response(401, {'error': 'Authentication required'})
-        
-        # Parse request body
+          # Parse request body
         request_body = json.loads(event.get('body', '{}'))
-        movie_id = request_body.get('movieId')
+        movie_id = sanitize_input(request_body.get('movieId'))
         
         if not movie_id:
             return build_response(400, {'error': 'Movie ID is required'})

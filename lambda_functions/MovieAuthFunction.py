@@ -1,40 +1,11 @@
 import json
-import os
 import uuid
 import time
 import jwt
 
-from utils.utils_function import generate_token
-from utils.utils_function import generate_salt, hash_password, verify_password, build_response
-
+from utils.config import Config
+from utils.utils_function import generate_token, generate_salt, hash_password, verify_password, build_response, validate_password_strength
 import utils.database as db
-
-# JWT secret - in production, use AWS Secrets Manager
-JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
-JWT_EXPIRY = 86400  # 24 hours in seconds
-
-def lambda_handler(event, context):
-    """
-    Main entry point for the Auth Lambda function
-    """
-    try:
-        # Extract path and HTTP method
-        path = event.get('path', '')
-        http_method = event.get('httpMethod', '')
-        
-        # Route request to appropriate handler
-        if path.endswith('/auth/login') and http_method == 'POST':
-            return handle_login(event)
-        elif path.endswith('/auth/register') and http_method == 'POST':
-            return handle_register(event)
-        elif path.endswith('/auth/refresh') and http_method == 'POST':
-            return handle_refresh(event)
-        else:
-            return build_response(404, {'error': 'Not found'})
-    
-    except Exception as e:
-        print(f"Error processing request: {str(e)}")
-        return build_response(500, {'error': 'Internal server error'})
 
 def handle_login(event):
     """
@@ -104,10 +75,9 @@ def handle_register(event):
         
         if 'Item' in response:
             return build_response(409, {'error': 'Email already exists'})
-        
-        # Validate password
-        if len(password) < 8:
-            return build_response(400, {'error': 'Password must be at least 8 characters'})
+          # Validate password
+        if not validate_password_strength(password):
+            return build_response(400, {'error': 'Password must be at least 8 characters long and contain letters and numbers'})
         
         # Generate password hash
         salt = generate_salt()
@@ -161,10 +131,9 @@ def handle_refresh(event):
             return build_response(401, {'error': 'Invalid token'})
         
         token = auth_header.split(' ')[1]
-        
-        # Verify token
+          # Verify token
         try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            payload = jwt.decode(token, Config.JWT_SECRET, algorithms=['HS256'])
         except:
             return build_response(401, {'error': 'Invalid token'})
         

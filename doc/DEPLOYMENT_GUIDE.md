@@ -1,6 +1,20 @@
-# Movie Recommender System - AWS Deployment Guide
+# Movie Recommender System - AWS Deployment Guide v2.0
 
-This guide provides step-by-step instructions for deploying the Movie Recommender System to AWS. The system consists of three Lambda functions, DynamoDB tables, S3 storage, and API Gateway endpoints.
+This guide provides step-by-step instructions for deploying the Movie Recommender System v2.0 to AWS. The system features **centralized configuration management** and enhanced security, consisting of Lambda functions, DynamoDB tables, S3 storage, and API Gateway endpoints.
+
+## What's New in v2.0
+
+### Centralized Configuration Management
+- **Single Config module** (`utils/config.py`) manages all environment variables
+- **Automatic validation** of critical configuration parameters
+- **Enhanced security** with consistent JWT and authentication handling
+- **Simplified deployment** with reduced configuration complexity
+
+### Enhanced Architecture
+- **Shared utility functions** across all Lambda functions
+- **Improved error handling** and response consistency
+- **Better security** with input sanitization and activity logging
+- **Simplified maintenance** with centralized code patterns
 
 ## Prerequisites
 
@@ -185,28 +199,84 @@ This script will:
 - Save embeddings to both local file and S3 bucket
 - Create a 23MB `embeddings.jsonl` file
 
+## Step 2.5: Configure Centralized Settings (NEW in v2.0)
+
+The system now uses a centralized configuration module that simplifies deployment and maintenance. All environment variables are managed through the `Config` class in `utils/config.py`.
+
+### Key Configuration Variables
+
+Set these environment variables for all Lambda functions:
+
+```bash
+# Core Configuration (Required)
+set JWT_SECRET=your-super-secret-jwt-key-here
+set EMBEDDINGS_BUCKET=your-movie-embeddings-bucket
+
+# DynamoDB Tables (Use defaults or customize)
+set USERS_TABLE=MovieRecommender_Users
+set FAVORITES_TABLE=MovieRecommender_Favorites
+set REVIEWS_TABLE=Reviews
+set MOVIES_TABLE=Movies
+set ACTIVITY_TABLE=MovieRecommender_Activity
+
+# ML Configuration (Optional - defaults provided)
+set EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+set EMBEDDINGS_OUTPUT_FILE=embeddings.jsonl
+
+# Development/Testing (Optional)
+set DYNAMODB_ENDPOINT_URL=http://localhost:8000
+set S3_ENDPOINT_URL=http://localhost:4566
+```
+
+### Configuration Benefits
+
+The centralized configuration provides:
+- **Single source of truth** for all environment variables
+- **Automatic validation** of critical parameters
+- **Default values** for optional settings
+- **Enhanced security** with consistent patterns
+- **Simplified maintenance** across all functions
+
 ## Step 3: Deploy Lambda Functions
 
 ### 3.1 Install Dependencies and Prepare Deployment Packages
+
+**Note:** In v2.0, the deployment is simplified with centralized configuration and shared utilities.
 
 ```bash
 # Create deployment directories
 mkdir lambda_deployments
 cd lambda_deployments
 
+# Create unified deployment package (recommended approach)
+mkdir unified_deployment
+cd unified_deployment
+
+# Install all dependencies
+pip install -r ..\..\requirements.txt -t .
+
+# Copy all Lambda function files and shared utilities
+copy ..\..\lambda_functions\*.py .
+copy ..\..\utils\*.py .
+
+# Create single ZIP package for all functions
+powershell Compress-Archive -Path * -DestinationPath ..\movie_recommender_lambda.zip
+cd ..
+```
+
+**Alternative: Separate deployment packages (if needed for function-specific optimization)**
+
+```bash
 # Create deployment package for Search Lambda
 mkdir search_deployment
 cd search_deployment
 
-# Install dependencies
 pip install -r ..\..\requirements.txt -t .
-
-# Copy required files
 copy ..\..\lambda_functions\search_lambda_router.py .
-copy ..\..\lambda_functions\search_lambda.py .
+copy ..\..\lambda_functions\RecommendationFunctions.py .
+copy ..\..\lambda_functions\handler.py .
 copy ..\..\utils\*.py .
 
-# Create ZIP package
 powershell Compress-Archive -Path * -DestinationPath ..\search_lambda.zip
 cd ..
 
@@ -216,6 +286,7 @@ cd auth_deployment
 
 pip install -r ..\..\requirements.txt -t .
 copy ..\..\lambda_functions\MovieAuthFunction.py .
+copy ..\..\lambda_functions\handler.py .
 copy ..\..\utils\*.py .
 
 powershell Compress-Archive -Path * -DestinationPath ..\auth_lambda.zip
@@ -227,6 +298,7 @@ cd userdata_deployment
 
 pip install -r ..\..\requirements.txt -t .
 copy ..\..\lambda_functions\MovieUserDataFunction.py .
+copy ..\..\lambda_functions\handler.py .
 copy ..\..\utils\*.py .
 
 powershell Compress-Archive -Path * -DestinationPath ..\userdata_lambda.zip

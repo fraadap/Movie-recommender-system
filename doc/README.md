@@ -4,12 +4,13 @@
 A comprehensive cloud-based movie recommendation system built on AWS, featuring semantic search, content-based filtering, collaborative filtering, and user management capabilities. The system provides personalized movie recommendations through advanced AI embeddings and machine learning algorithms.
 
 ## Architecture
-- **Backend**: AWS Lambda functions for serverless computing
+- **Backend**: AWS Lambda functions for serverless computing with **centralized configuration management**
 - **Database**: DynamoDB for scalable data storage
 - **Search**: Semantic search using SentenceTransformers embeddings stored in S3
 - **API**: API Gateway for RESTful endpoints
 - **Frontend**: Vue.js web application
-- **Authentication**: JWT-based user authentication
+- **Authentication**: JWT-based user authentication with **shared security utilities**
+- **Configuration**: Centralized configuration module for environment variables and settings
 
 ## Prerequisites
 - Python 3.9+
@@ -148,28 +149,50 @@ See `api.yaml` for complete API documentation.
 
 ## Environment Variables
 
-### Lambda Environment Variables
-Set these in your Lambda function configurations:
+The system now uses a **centralized configuration module** (`utils/config.py`) that manages all environment variables in one place. This provides better maintainability, validation, and consistency across all Lambda functions.
 
-#### Search Lambda
+### Configuration Module (`utils/config.py`)
+All environment variables are centrally managed through the `Config` class:
+
+```python
+from utils.config import Config
+
+# JWT Configuration
+Config.JWT_SECRET          # JWT secret key
+Config.JWT_EXPIRY         # Token expiration time
+
+# DynamoDB Tables  
+Config.USERS_TABLE        # User accounts
+Config.FAVORITES_TABLE    # User favorites
+Config.REVIEWS_TABLE      # User reviews
+Config.MOVIES_TABLE       # Movie metadata
+Config.ACTIVITY_TABLE     # User activity logs
+
+# ML and Search Configuration
+Config.EMBEDDINGS_BUCKET      # S3 bucket for embeddings
+Config.EMBEDDING_MODEL        # SentenceTransformer model
+Config.EMBEDDINGS_OUTPUT_FILE # Embeddings file name
+
+# AWS Endpoints (for local testing)
+Config.DYNAMODB_ENDPOINT_URL  # Custom DynamoDB endpoint
+Config.S3_ENDPOINT_URL        # Custom S3 endpoint
+```
+
+### Lambda Environment Variables
+Set these in your Lambda function configurations or local environment:
+
+#### All Lambda Functions (Shared Configuration)
+- `JWT_SECRET`: Secret key for JWT tokens
+- `USERS_TABLE`: Users table name (default: `MovieRecommender_Users`)
+- `FAVORITES_TABLE`: Favorites table name (default: `MovieRecommender_Favorites`)
+- `REVIEWS_TABLE`: Reviews table name (default: `Reviews`)
+- `MOVIES_TABLE`: Movies table name (default: `Movies`)
+- `ACTIVITY_TABLE`: Activity table name (default: `MovieRecommender_Activity`)
 - `EMBEDDINGS_BUCKET`: S3 bucket storing embeddings
 - `EMBEDDINGS_OUTPUT_FILE`: Embeddings file name (default: `embeddings.jsonl`)
 - `EMBEDDING_MODEL`: SentenceTransformer model (default: `sentence-transformers/all-MiniLM-L6-v2`)
-- `DYNAMODB_TABLE`: Movies table name (default: `Movies`)
-- `REVIEWS_TABLE`: Reviews table name (default: `Reviews`)
 
-#### Auth Lambda
-- `JWT_SECRET`: Secret key for JWT tokens
-- `USERS_TABLE`: Users table name (default: `MovieRecommender_Users`)
-
-#### User Data Lambda
-- `JWT_SECRET`: Secret key for JWT tokens
-- `USERS_TABLE`: Users table name
-- `FAVORITES_TABLE`: Favorites table name
-- `REVIEWS_TABLE`: Reviews table name
-- `ACTIVITY_TABLE`: Activity table name
-
-### Local Development Variables
+#### Development/Local Testing
 - `DYNAMODB_ENDPOINT_URL`: Custom DynamoDB endpoint (for local testing)
 - `S3_ENDPOINT_URL`: Custom S3 endpoint (for local testing)
 
@@ -219,24 +242,60 @@ Cloud-Computing/
 │   ├── api_gateway_setup.py # API Gateway configuration
 │   └── config.py          # Configuration settings
 ├── lambda_functions/       # AWS Lambda function code
-│   ├── search_lambda.py    # Core recommendation algorithms
-│   ├── search_lambda_router.py # API routing for search
+│   ├── handler.py          # Main routing handler (centralized)
+│   ├── search_lambda_router.py # API routing for search endpoints
 │   ├── MovieAuthFunction.py # User authentication
 │   └── MovieUserDataFunction.py # User data management
-├── utils/                  # Utility functions
-│   ├── database.py         # Database connections
-│   └── utils_function.py   # Common utilities
+├── utils/                  # Shared utility modules
+│   ├── config.py           # **NEW: Centralized configuration management**
+│   ├── database.py         # Database connections and table access
+│   └── utils_function.py   # Authentication, validation, and response utilities
 └── frontend/               # Vue.js web application
     ├── src/               # Source code
     ├── components/        # Vue components
     └── services/          # API services
 ```
 
+## New Features in Version 2.0
+
+### Centralized Configuration Module
+- **Single source of truth** for all environment variables
+- **Automatic validation** of critical configuration parameters
+- **Enhanced security** with consistent JWT and authentication handling
+- **Improved maintainability** with reduced code duplication
+
+### Enhanced Security and Validation
+- **Input sanitization** across all user inputs
+- **Password strength validation** with configurable requirements
+- **User activity logging** for security monitoring
+- **Consistent error handling** and response formatting
+
+### Improved Code Architecture
+- **Shared utility functions** across all Lambda functions
+- **Centralized database access** with connection pooling
+- **Consistent CORS headers** and response formatting
+- **Enhanced error reporting** and debugging capabilities
+
 ## Deployment
 
 For complete deployment instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
 For API documentation, see [api.yaml](api.yaml).
+
+## Dependencies
+
+The system requires the following Python packages (see `requirements.txt`):
+
+```
+boto3>=1.26.0           # AWS SDK
+PyJWT>=2.6.0            # JWT token handling  
+sentence-transformers>=2.2.2  # AI embeddings
+numpy>=1.24.0           # Numerical computations
+bcrypt>=4.0.0           # Password hashing
+requests>=2.28.0        # HTTP requests
+```
+
+**Note**: When deploying to AWS Lambda, ensure all dependencies are included in your deployment package or available as Lambda layers.
 
 ## Support
 

@@ -1,37 +1,80 @@
-Project Overview: Movie Recommender System
-==========================================
+Project Overview: Movie Recommender System v2.0
+===============================================
 
 This is a complete serverless movie recommendation system built on AWS, featuring semantic search, 
-collaborative filtering, user management, and a modern Vue.js frontend.
+collaborative filtering, user management, and a modern Vue.js frontend. **Version 2.0** introduces 
+centralized configuration management and enhanced security features.
 
 BACKEND STRUCTURE:
 ===================
 
+lambda_functions/handler.py:
+- **NEW: Main centralized routing handler** for all API endpoints
+- Imports and coordinates all Lambda function modules
+- Provides unified entry point for deployment
+- Enhanced error handling and logging
+
 lambda_functions/MovieAuthFunction.py:
 - Handles user authentication and registration
-- JWT token generation and validation
-- Password hashing and security
+- **UPDATED: Uses centralized Config module** for environment variables
+- JWT token generation and validation with enhanced security
+- Password strength validation and security improvements
 - User account management endpoints (/auth/login, /auth/register, /auth/refresh)
 
 lambda_functions/MovieUserDataFunction.py:
-- Manages user behavioral data and preferences
-- Favorites list management
-- User reviews and ratings
+- Manages user behavioral data and preferences  
+- **UPDATED: Integrated with shared configuration and utilities**
+- Enhanced input sanitization and user activity logging
+- Favorites list management with improved validation
+- User reviews and ratings with enhanced security
 - Activity tracking and user account info
 - Endpoints: /user-data/favorites, /user-data/reviews, /user/activity, /user/account
 
 lambda_functions/search_lambda_router.py:
-- Main router for search and recommendation endpoints
+- **UPDATED: Main router for search and recommendation endpoints**
 - Handles API Gateway integration and request routing
+- **NEW: Uses centralized Config for all environment variables**
+- Enhanced caching of ML models and database connections
+- Improved error handling and resource management
 - Coordinates between search algorithms and data sources
 - Endpoints: /search, /content, /collaborative, /similar
 
-lambda_functions/search_lambda.py:
+lambda_functions/RecommendationFunctions.py:
 - Core recommendation algorithms implementation
+- **UPDATED: Integrated with shared configuration module**
 - Semantic search using sentence transformers embeddings
 - Content-based filtering using movie similarity
 - Collaborative filtering based on user ratings
 - Machine learning logic and similarity calculations
+
+SHARED UTILITIES (NEW IN v2.0):
+==============================
+
+utils/config.py:
+- **NEW: Centralized configuration management module**
+- Single source of truth for all environment variables
+- Automatic validation of critical configuration parameters
+- JWT, database, S3, and ML model configuration
+- Support for local development endpoints
+- CORS headers and feature flag management
+- Enhanced security and maintainability
+
+utils/utils_function.py:
+- **COMPLETELY REWRITTEN: Enhanced shared utility functions**
+- JWT token generation and validation with Config integration
+- Password hashing, validation, and strength checking
+- User authentication and session management
+- Input sanitization and security utilities
+- User activity logging and audit trails
+- Consistent response formatting and error handling
+- CORS header management
+
+utils/database.py:
+- **UPDATED: Centralized database connection management**
+- Integration with Config module for endpoint configuration
+- Enhanced connection pooling and resource management
+- Health checking and connection validation
+- Consistent table access patterns across all functions
 
 SETUP AND CONFIGURATION:
 ========================
@@ -40,15 +83,54 @@ initial_setup/create_table.py:
 - Creates all 7 DynamoDB tables required by the system
 - Movies, Reviews, MovieRecommender_Users, MovieRecommender_Favorites
 - MovieRecommender_Watched, MovieRecommender_Preferences, MovieRecommender_Activity
+- **ENHANCED: Better error handling and table validation**
 - Configures indexes and table settings
 
 initial_setup/data_processor.py:
 - Processes Kaggle movie dataset (movies_metadata.csv, credits.csv, ratings.csv)
+- **UPDATED: Enhanced data validation and processing**
 - Cleans and transforms data for DynamoDB storage
 - Handles ~45,000 movies and ~26M ratings
 - Extracts cast, crew, and metadata information
+- Improved error handling and data quality checks
 
 initial_setup/generate_embeddings.py:
+- **UPDATED: Integration with centralized configuration**
+- Generates semantic embeddings using SentenceTransformers
+- Uploads embeddings to S3 with improved error handling
+- Enhanced processing efficiency and batch operations
+
+initial_setup/config.py:
+- **UPDATED: Works with new centralized Config module**
+- Local configuration settings for development
+- Integration with AWS services configuration
+
+KEY IMPROVEMENTS IN v2.0:
+=========================
+
+1. **Centralized Configuration Management**
+   - Single Config class manages all environment variables
+   - Automatic validation and default value handling
+   - Enhanced security and maintainability
+   - Consistent configuration across all Lambda functions
+
+2. **Enhanced Security Features**
+   - Input sanitization across all user inputs
+   - Password strength validation with configurable requirements
+   - User activity logging for security monitoring
+   - Enhanced JWT token handling and validation
+
+3. **Improved Code Architecture**
+   - Shared utility functions reduce code duplication
+   - Centralized database access with connection pooling
+   - Consistent error handling and response formatting
+   - Enhanced debugging and logging capabilities
+
+4. **Better Development Experience**
+   - Simplified local development setup
+   - Consistent CORS headers and API responses
+   - Improved error reporting and debugging
+   - Enhanced code maintainability and testing
 - Generates 384-dimensional embeddings for all movies
 - Uses sentence-transformers/all-MiniLM-L6-v2 model
 - Combines title, overview, genres, cast, and directors into descriptive text
