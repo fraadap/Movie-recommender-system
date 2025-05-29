@@ -2,15 +2,11 @@ import json
 import boto3
 import os
 import uuid
-import hashlib
-import hmac
-import base64
 import time
 import jwt
-from botocore.exceptions import ClientError
 
 from utils.auth import generate_token
-
+from utils.auth import generate_salt, hash_password, verify_password, build_response
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
 users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
@@ -207,42 +203,3 @@ def handle_refresh(event):
     except Exception as e:
         print(f"Refresh token error: {str(e)}")
         return build_response(500, {'error': 'Error refreshing token'})
-
-def generate_salt():
-    """
-    Generate random salt for password hashing
-    """
-    return base64.b64encode(os.urandom(16)).decode()
-
-def hash_password(password, salt):
-    """
-    Hash password using HMAC-SHA256
-    """
-    pwdhash = hmac.new(
-        salt.encode(),
-        password.encode(),
-        hashlib.sha256
-    ).digest()
-    return base64.b64encode(pwdhash).decode()
-
-def verify_password(password, stored_hash, salt):
-    """
-    Verify password against stored hash
-    """
-    computed_hash = hash_password(password, salt)
-    return computed_hash == stored_hash
-
-def build_response(status_code, body):
-    """
-    Build API Gateway response
-    """
-    return {
-        'statusCode': status_code,
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-        },
-        'body': json.dumps(body)
-    } 

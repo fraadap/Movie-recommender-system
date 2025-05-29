@@ -6,12 +6,20 @@ import functools
 from typing import Callable, Any, Dict
 import logging
 import time
+import json
+import base64
+import hmac
+import hashlib
+import boto3
 
 logger = logging.getLogger(__name__)
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
 JWT_EXPIRY = 86400  # 24 hours in seconds
+
+dynamodb = boto3.resource('dynamodb')
+users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
 
 def get_cors_headers():
     """Get CORS headers for responses"""
@@ -65,3 +73,41 @@ def get_authenticated_user(event):
     except:
         return None
 
+def generate_salt():
+    """
+    Generate random salt for password hashing
+    """
+    return base64.b64encode(os.urandom(16)).decode()
+
+def hash_password(password, salt):
+    """
+    Hash password using HMAC-SHA256
+    """
+    pwdhash = hmac.new(
+        salt.encode(),
+        password.encode(),
+        hashlib.sha256
+    ).digest()
+    return base64.b64encode(pwdhash).decode()
+
+def verify_password(password, stored_hash, salt):
+    """
+    Verify password against stored hash
+    """
+    computed_hash = hash_password(password, salt)
+    return computed_hash == stored_hash
+
+def build_response(status_code, body):
+    """
+    Build API Gateway response
+    """
+    return {
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+        },
+        'body': json.dumps(body)
+    } 

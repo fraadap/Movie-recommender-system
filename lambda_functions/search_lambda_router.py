@@ -2,12 +2,10 @@ import json
 import os
 import search_lambda as search_engine
 import logging
-import jwt
-from boto3.dynamodb.conditions import Key
 import boto3
 
 from utils.auth import get_authenticated_user
-from utils.auth import get_cors_headers
+from utils.auth import build_response
 
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
@@ -111,13 +109,3 @@ def get_movie_metadata(movie_id):
     except Exception as e:
         logger.error(f"Error fetching movie {movie_id}: {str(e)}")
         return None
-
-def build_response(status_code, body):
-    """
-    Build API Gateway response
-    """
-    return {
-        'statusCode': status_code,
-        'headers': get_cors_headers(),
-        'body': json.dumps(body)
-    }

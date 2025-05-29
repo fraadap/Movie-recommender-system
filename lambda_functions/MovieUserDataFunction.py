@@ -2,12 +2,10 @@ import json
 import boto3
 import os
 import time
-import jwt
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
-
-from utils.auth import get_authenticated_user
+from utils.auth import get_authenticated_user, build_response
 
 # Initialize DynamoDB client
 dynamodb = boto3.resource('dynamodb')
@@ -369,21 +367,6 @@ def log_user_activity(user_id, action, data=None):
         activity_table.put_item(Item=item)
     except Exception as e:
         print(f"Error logging activity: {str(e)}")
-
-def build_response(status_code, body):
-    """
-    Build API Gateway response
-    """
-    return {
-        'statusCode': status_code,
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-        },
-        'body': json.dumps(body)
-    } 
     
 def handle_add_review(event):
     """
