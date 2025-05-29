@@ -83,10 +83,19 @@ def recommend_content(movie_ids, top_k):
     weights = [rating for _, rating in filtered]
     # Calcolo della media pesata degli embedding
     weighted_vectors = np.array(vectors) * np.array(weights)[:, None]  # shape: (n, d)
-    avg_emb = np.sum(weighted_vectors, axis=0) / np.sum(weights)
+    avg_emb = np.sum(weighted_vectors, axis=0) / np.sum(weights) #shape: (d,)
 
     seen_ids = set(mid for mid, _ in movie_ids)
     sims = [(mid, cosine_similarity(avg_emb, emb)) for mid, emb in embed_map.items() if mid not in seen_ids]
+    sims.sort(key=lambda x: x[1], reverse=True)
+    return sims[:top_k]
+
+def recommend_similar(movied_id, top_k):
+    embed_map = load_embeddings()
+    if movied_id not in embed_map:
+        return []
+    vector = embed_map[movied_id]
+    sims = [(mid, cosine_similarity(vector, emb)) for mid, emb in embed_map.items() if mid != movied_id]
     sims.sort(key=lambda x: x[1], reverse=True)
     return sims[:top_k]
 

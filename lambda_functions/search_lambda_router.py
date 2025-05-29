@@ -45,7 +45,7 @@ def lambda_handler(event, context):
     
     # Determine operation from path or body
     operation = None
-    if path in ['search', 'content', 'collaborative']:
+    if path in ['search', 'content', 'collaborative', 'similar']:
         operation = path
     else:
         operation = request_body.get('operation')
@@ -68,11 +68,6 @@ def lambda_handler(event, context):
         elif operation == 'content':
             # Handle both movieId (single) and movie_ids (array) for flexibility
             movie_ids = request_body.get('movie_ids', [])
-            
-            # Support for movieId coming from frontend
-            single_movie_id = request_body.get('movieId')
-            if single_movie_id and not movie_ids:
-                movie_ids = [single_movie_id]
                 
             if not movie_ids:
                 return build_response(400, {'error': 'Missing movie_ids parameter'})
@@ -87,7 +82,15 @@ def lambda_handler(event, context):
             
             user_id = user.get('user_id')
             result = search_engine.recommend_collaborative(user_id, top_k)
+
+        elif operation == 'similar':
+            user = get_authenticated_user(event)
+            if not user:
+                return build_response(401, {'error': 'Authentication required'})
             
+            user_id = user.get('user_id')
+            result = search_engine.recommend_similar(movie_id, top_k)
+
         else:
             return build_response(400, {'error': f'Invalid operation: {operation}'})
         
