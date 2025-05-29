@@ -72,14 +72,21 @@ def recommend_semantic(query, top_k):
     sims.sort(key=lambda x: x[1], reverse=True)
     return sims[:top_k]
 
-
 def recommend_content(movie_ids, top_k):
     embed_map = load_embeddings()
-    vectors = [embed_map[mid] for mid in movie_ids if mid in embed_map]
-    if not vectors:
+
+    filtered = [(mid, rating) for mid, rating in movie_ids if mid in embed_map]
+    if not filtered:
         return []
-    avg_emb = np.mean(np.array(vectors), axis=0).tolist()
-    sims = [(mid, cosine_similarity(avg_emb, emb)) for mid, emb in embed_map.items() if mid not in movie_ids]
+    # Estrai gli embedding e i rating
+    vectors = [embed_map[mid] for mid, _ in filtered]
+    weights = [rating for _, rating in filtered]
+    # Calcolo della media pesata degli embedding
+    weighted_vectors = np.array(vectors) * np.array(weights)[:, None]  # shape: (n, d)
+    avg_emb = np.sum(weighted_vectors, axis=0) / np.sum(weights)
+
+    seen_ids = set(mid for mid, _ in movie_ids)
+    sims = [(mid, cosine_similarity(avg_emb, emb)) for mid, emb in embed_map.items() if mid not in seen_ids]
     sims.sort(key=lambda x: x[1], reverse=True)
     return sims[:top_k]
 
