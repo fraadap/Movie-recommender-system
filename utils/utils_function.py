@@ -1,25 +1,18 @@
-"""Authentication utilities for Movie Recommender System."""
-
 import os
 import jwt
-import functools
-from typing import Callable, Any, Dict
 import logging
 import time
 import json
 import base64
 import hmac
 import hashlib
-import boto3
+import database as db
 
 logger = logging.getLogger(__name__)
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
 JWT_EXPIRY = 86400  # 24 hours in seconds
-
-dynamodb = boto3.resource('dynamodb')
-users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
 
 def get_cors_headers():
     """Get CORS headers for responses"""
@@ -65,7 +58,7 @@ def get_authenticated_user(event):
             return None
         
         # Get user from DynamoDB
-        response = users_table.get_item(
+        response = db.users_table.get_item(
             Key={'email': email}
         )
         

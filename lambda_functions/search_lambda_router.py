@@ -2,14 +2,9 @@ import json
 import os
 import search_lambda as search_engine
 import logging
-import boto3
 
-from utils.auth import get_authenticated_user
-from utils.auth import build_response
-
-# Initialize DynamoDB client
-dynamodb = boto3.resource('dynamodb')
-users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
+from utils.utils_function import get_authenticated_user
+from utils.utils_function import build_response
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')

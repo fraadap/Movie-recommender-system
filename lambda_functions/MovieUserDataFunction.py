@@ -3,17 +3,10 @@ import boto3
 import os
 import time
 from boto3.dynamodb.conditions import Key
-from botocore.exceptions import ClientError
 
-from utils.auth import get_authenticated_user, build_response
+from utils.utils_function import get_authenticated_user, build_response
+import utils.database as db 
 
-# Initialize DynamoDB client
-dynamodb = boto3.resource('dynamodb')
-users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
-favorites_table = dynamodb.Table(os.environ.get('FAVORITES_TABLE', 'MovieRecommender_Favorites'))
-activity_table = dynamodb.Table(os.environ.get('ACTIVITY_TABLE', 'MovieRecommender_Activity'))
-reviews_table = dynamodb.Table(os.environ.get('REVIEWS_TABLE', 'Reviews'))
-movies_table = dynamodb.Table(os.environ.get('MOVIES_TABLE', 'Movies'))
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
@@ -68,7 +61,7 @@ def handle_get_favorites(event):
         user_id = user.get('user_id')
         
         # Query favorites table for user's favorites
-        response = favorites_table.query(
+        response = db.favorites_table.query(
             KeyConditionExpression=Key('user_id').eq(user_id)
         )
         
@@ -76,7 +69,7 @@ def handle_get_favorites(event):
         results = []
         for item in favorite_items:
             mid = item.get('movie_id')
-            resp = movies_table.get_item(Key={'movie_id': str(mid)})
+            resp = db.movies_table.get_item(Key={'movie_id': str(mid)})
             movie = resp.get('Item')
             if movie:
                 results.append(movie)
@@ -111,7 +104,7 @@ def handle_add_favorite(event):
         timestamp = int(time.time())
         
         # Add to favorites table
-        favorites_table.put_item(
+        db.favorites_table.put_item(
             Item={
                 'user_id': user_id,
                 'movie_id': movie_id,
@@ -149,7 +142,7 @@ def handle_remove_favorite(event):
         user_id = user.get('user_id')
         
         # Remove from favorites table
-        favorites_table.delete_item(
+        db.favorites_table.delete_item(
             Key={
                 'user_id': user_id,
                 'movie_id': movie_id
@@ -183,7 +176,7 @@ def handle_toggle_favorite(event):
         user_id = user.get('user_id')
         
         # Check if movie is already a favorite
-        response = favorites_table.get_item(
+        response = db.favorites_table.get_item(
             Key={
                 'user_id': user_id,
                 'movie_id': movie_id
@@ -221,7 +214,7 @@ def handle_remove_review(event):
         user_id = user.get('user_id')
         
         # Remove from reviews table
-        reviews_table.delete_item(
+        db.reviews_table.delete_item(
             Key={
                 'user_id': user_id,
                 'movie_id': movie_id
@@ -259,7 +252,7 @@ def handle_toggle_reviewed(event):
         user_id = user.get('user_id')
         
         # Check if movie is already reviewed
-        response = reviews_table.get_item(
+        response = db.reviews_table.get_item(
             Key={
                 'user_id': user_id,
                 'movie_id': movie_id
@@ -292,17 +285,17 @@ def handle_delete_account(event):
         # Delete all user data from all tables
         try:
             # Delete from users table
-            users_table.delete_item(
+            db.users_table.delete_item(
                 Key={'email': email}
             )
             
             # Delete all favorites
-            favorites = favorites_table.query(
+            favorites = db.favorites_table.query(
                 KeyConditionExpression=Key('user_id').eq(user_id)
             ).get('Items', [])
             
             for favorite in favorites:
-                favorites_table.delete_item(
+                db.favorites_table.delete_item(
                     Key={
                         'user_id': user_id,
                         'movie_id': favorite.get('movie_id')
@@ -332,7 +325,7 @@ def handle_get_activity(event):
         user_id = user.get('user_id')
         
         # Query activity table for user's activities
-        response = activity_table.query(
+        response = db.activity_table.query(
             KeyConditionExpression=Key('user_id').eq(user_id),
             ScanIndexForward=False  # Sort by timestamp descending
         )
@@ -364,7 +357,7 @@ def log_user_activity(user_id, action, data=None):
         item['data'] = data
     
     try:
-        activity_table.put_item(Item=item)
+        db.activity_table.put_item(Item=item)
     except Exception as e:
         print(f"Error logging activity: {str(e)}")
     
@@ -390,7 +383,7 @@ def handle_add_review(event):
         timestamp = int(time.time())
 
         # Add to reviews table
-        reviews_table.put_item(
+        db.reviews_table.put_item(
             Item={
                 'user_id': user_id,
                 'movie_id': movie_id,
@@ -421,7 +414,7 @@ def handle_get_reviews(event):
         user_id = user.get('user_id')
 
         # Query reviews table for user's reviews
-        response = reviews_table.query(
+        response = db.reviews_table.query(
             KeyConditionExpression=Key('user_id').eq(user_id)
         )
 
@@ -431,7 +424,7 @@ def handle_get_reviews(event):
         for item in review_items:
             mid = item.get('movie_id')
             score = item.get('rating')
-            resp = movies_table.get_item(Key={'movie_id': str(mid)})
+            resp = db.movies_table.get_item(Key={'movie_id': str(mid)})
             movie = resp.get('Item')
             if movie:
                 movie['rating'] = score

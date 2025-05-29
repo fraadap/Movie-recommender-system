@@ -1,15 +1,13 @@
 import json
-import boto3
 import os
 import uuid
 import time
 import jwt
 
-from utils.auth import generate_token
-from utils.auth import generate_salt, hash_password, verify_password, build_response
-# Initialize DynamoDB client
-dynamodb = boto3.resource('dynamodb')
-users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Users'))
+from utils.utils_function import generate_token
+from utils.utils_function import generate_salt, hash_password, verify_password, build_response
+
+import utils.database as db
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
@@ -52,7 +50,7 @@ def handle_login(event):
             return build_response(400, {'error': 'Email and password are required'})
         
         # Check if user exists
-        response = users_table.get_item(
+        response = db.users_table.get_item(
             Key={'email': email}
         )
         
@@ -100,7 +98,7 @@ def handle_register(event):
             return build_response(400, {'error': 'Name, email, and password are required'})
         
         # Check if user already exists
-        response = users_table.get_item(
+        response = db.users_table.get_item(
             Key={'email': email}
         )
         
@@ -130,7 +128,7 @@ def handle_register(event):
         }
         
         # Save user to DynamoDB
-        users_table.put_item(Item=user)
+        db.users_table.put_item(Item=user)
         
         # Generate JWT token
         token = generate_token(user)
@@ -178,7 +176,7 @@ def handle_refresh(event):
             return build_response(401, {'error': 'Invalid token'})
         
         # Get user from DynamoDB
-        response = users_table.get_item(
+        response = db.users_table.get_item(
             Key={'email': email}
         )
         
