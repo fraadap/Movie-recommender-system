@@ -12,6 +12,7 @@ users_table = dynamodb.Table(os.environ.get('USERS_TABLE', 'MovieRecommender_Use
 favorites_table = dynamodb.Table(os.environ.get('FAVORITES_TABLE', 'MovieRecommender_Favorites'))
 activity_table = dynamodb.Table(os.environ.get('ACTIVITY_TABLE', 'MovieRecommender_Activity'))
 reviews_table = dynamodb.Table(os.environ.get('REVIEWS_TABLE', 'Reviews'))
+movies_table = dynamodb.Table(os.environ.get('MOVIES_TABLE', 'Movies'))
 
 # JWT secret - in production, use AWS Secrets Manager
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-key')
@@ -46,6 +47,8 @@ def lambda_handler(event, context):
             return handle_toggle_reviewed(event)
         elif '/user-data/reviews/' in path and http_method == 'DELETE':
             return handle_remove_review(event)
+        elif path.endswith('/movies') and http_method == 'POST':
+            return handle_get_movies(event)
         else:
             return build_response(404, {'error': 'Not found'})
     
@@ -71,7 +74,14 @@ def handle_get_favorites(event):
         )
         
         favorite_items = response.get('Items', [])
-        
+        results = []
+        for item in favorite_items:
+            mid = item.get('movie_id')
+            resp = movies_table.get_item(Key={'movie_id': str(mid)})
+            movie = resp.get('Item')
+            if movie:
+                results.append(movie)
+                
         # Format response
         return build_response(200, {
             'movies': favorite_items
@@ -461,10 +471,20 @@ def handle_get_reviews(event):
         )
 
         review_items = response.get('Items', [])
+        
+        results = []
+        for item in review_items:
+            mid = item.get('movie_id')
+            score = item.get('rating')
+            resp = movies_table.get_item(Key={'movie_id': str(mid)})
+            movie = resp.get('Item')
+            if movie:
+                movie['rating'] = score
+                results.append(movie)
 
         # Format response
         return build_response(200, {
-            'reviews': review_items
+            'movies': results
         })
 
     except Exception as e:
