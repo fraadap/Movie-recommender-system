@@ -47,8 +47,6 @@ def lambda_handler(event, context):
             return handle_toggle_reviewed(event)
         elif '/user-data/reviews/' in path and http_method == 'DELETE':
             return handle_remove_review(event)
-        elif path.endswith('/movies') and http_method == 'POST':
-            return handle_get_movies(event)
         else:
             return build_response(404, {'error': 'Not found'})
     
