@@ -26,10 +26,7 @@ def lambda_handler(event, context):
     """
     logger.info(f"Received event: {json.dumps(event)}")
     
-    # Extract path from API Gateway event
-    path = None
-    if event.get('resource'):
-        path = event.get('path', '').strip('/')
+    path = event.get('path', '').strip('/')
     
     # Parse request body
     request_body = {}
@@ -39,21 +36,16 @@ def lambda_handler(event, context):
             request_body = json.loads(event.get('body', '{}'))
         except json.JSONDecodeError:
             return build_response(400, {'error': 'Invalid JSON in request body'})
-    elif event.get('operation') or path == 'recommend':
-        # Direct Lambda invocation or generic endpoint
-        request_body = event
+    else:
+        return build_response(400, {'error': 'Invalid JSON in request body'})
     
     # Determine operation from path or body
     operation = None
     if path in ['search', 'content', 'collaborative', 'similar']:
         operation = path
     else:
-        operation = request_body.get('operation')
-    
-    # If no operation found, return error
-    if not operation:
-        return build_response(400, {'error': 'Missing operation parameter'})
-    
+        return build_response(400, {'error': 'Invalid path'})
+        
     # Extract common parameters
     top_k = int(request_body.get('top_k', 10))
     
@@ -66,7 +58,7 @@ def lambda_handler(event, context):
             result = search_engine.recommend_semantic(query, top_k)
             
         elif operation == 'content':
-            # Handle both movieId (single) and movie_ids (array) for flexibility
+            # Taking the tuples of (movie_ids, rating)
             movie_ids = request_body.get('movie_ids', [])
                 
             if not movie_ids:
@@ -75,7 +67,7 @@ def lambda_handler(event, context):
             result = search_engine.recommend_content(movie_ids, top_k)
             
         elif operation == 'collaborative':
-            # Get authenticated user
+            # Get the user by the token
             user = get_authenticated_user(event)
             if not user:
                 return build_response(401, {'error': 'Authentication required'})
@@ -84,11 +76,10 @@ def lambda_handler(event, context):
             result = search_engine.recommend_collaborative(user_id, top_k)
 
         elif operation == 'similar':
-            user = get_authenticated_user(event)
-            if not user:
-                return build_response(401, {'error': 'Authentication required'})
+            movie_id = request_body.get('movie_id')
+            if not movie_id:
+                return build_response(400, {'error': 'Missing movie_id parameter for similar operation'})
             
-            user_id = user.get('user_id')
             result = search_engine.recommend_similar(movie_id, top_k)
 
         else:
