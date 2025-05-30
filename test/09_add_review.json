@@ -1,0 +1,10 @@
+{
+  "httpMethod": "POST",
+  "path": "/user-data/reviews",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_JWT_TOKEN_HERE",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"movieId\": \"862\", \"rating\": 4.5}"
+}

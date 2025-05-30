@@ -15,32 +15,6 @@ _model = None
 _s3_client = None
 _dynamodb = None
 
-def lambda_handler(event, context):
-    """
-    Main entry point for the Search Lambda function
-    """
-    try:
-        # Extract path and HTTP method
-        path = event.get('path', '').strip('/')
-        http_method = event.get('httpMethod', '')
-        
-        # Route request to appropriate handler
-        if path == 'search' and http_method == 'POST':
-            return handle_semantic_search(event)
-        elif path == 'content' and http_method == 'POST':
-            return handle_content_based_search(event)
-        elif path == 'collaborative' and http_method == 'POST':
-            return handle_collaborative_search(event)
-        elif path == 'similar' and http_method == 'POST':
-            return handle_similar_search(event)
-        else:
-            return build_response(404, {'error': 'Not found'})
-    
-    except Exception as e:
-        print(f"Error processing request: {str(e)}")
-        return build_response(500, {'error': 'Internal server error'})
-
-
 def handle_semantic_search(event):
     """
     Handle semantic search request

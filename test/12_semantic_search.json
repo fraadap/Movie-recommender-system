@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "path": "/search",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"query\": \"action movies with superheroes and adventure\", \"top_k\": 10}"
+}

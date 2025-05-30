@@ -1,6 +1,6 @@
 import MovieAuthFunction as maf
 import MovieUserDataFunction as mudf
-import lambda_functions.RecommendationFunctions as rf
+import RecommendationFunctions as rf
 from utils.config import Config
 from utils.utils_function import build_response
 

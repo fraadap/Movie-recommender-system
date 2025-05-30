@@ -1,0 +1,10 @@
+{
+  "httpMethod": "POST",
+  "path": "/user-data/favorites",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_JWT_TOKEN_HERE",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"movieId\": \"862\"}"
+}

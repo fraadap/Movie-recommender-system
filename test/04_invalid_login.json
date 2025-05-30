@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "path": "/auth/login",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"email\": \"wrong@example.com\", \"password\": \"wrongpassword\"}"
+}

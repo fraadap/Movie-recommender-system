@@ -1,0 +1,10 @@
+{
+  "httpMethod": "POST",
+  "path": "/collaborative",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_JWT_TOKEN_HERE",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"top_k\": 10}"
+}

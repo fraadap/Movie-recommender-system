@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "path": "/search",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"query\": \"I want to find action-packed adventure movies with superheroes that have amazing special effects and compelling storylines with strong character development and emotional depth suitable for family viewing\", \"top_k\": 20}"
+}

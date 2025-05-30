@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "path": "/similar",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost:3000"
+  },
+  "body": "{\"movie_id\": \"862\", \"top_k\": 10}"
+}

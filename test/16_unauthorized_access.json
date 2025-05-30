@@ -1,0 +1,8 @@
+{
+  "httpMethod": "GET",
+  "path": "/user-data/favorites",
+  "headers": {
+    "Content-Type": "application/json",
+    "Origin": "http://localhost:3000"
+  }
+}
