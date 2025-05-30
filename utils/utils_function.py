@@ -166,6 +166,23 @@ def validate_password(password):
     
     return True, ""
 
+def validate_password_strength(password):
+    """
+    Validate minimal password strength requirements for registration
+    Args:
+        password: Password to validate
+    Returns:
+        bool: True if password meets minimal requirements, False otherwise
+    """
+    if not password or len(password) < 8:
+        return False
+        
+    has_letter = any(c.isalpha() for c in password)
+    has_number = any(c.isdigit() for c in password)
+    no_spaces = ' ' not in password
+    
+    return has_letter and has_number and no_spaces
+
 def log_user_activity(user_id, action, data=None):
     """
     Log user activity to activity table if logging is enabled
