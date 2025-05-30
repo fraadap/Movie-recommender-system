@@ -12,8 +12,8 @@ class Config:
     """
     
     # JWT Configuration
-    JWT_SECRET = os.getenv('JWT_SECRET', 'your-jwt-secret-key')
-    JWT_EXPIRY = int(os.getenv('JWT_EXPIRY', '86400'))  # 24 hours in seconds
+    JWT_SECRET = os.getenv('JWT_SECRET', 'P1ywar3K75qD4dfGBFjsJrfbQRLixtZBZKPPYZjJFbQej9pqudua23GDICpfOVihN_2zHdU-hU1pVl57rXAu3Q')
+    JWT_EXPIRY = int(os.getenv('JWT_EXPIRY', '7200'))  # 2 hours in seconds
     
     # DynamoDB Table Names
     USERS_TABLE = os.getenv('USERS_TABLE', 'MovieRecommender_Users')
@@ -22,19 +22,15 @@ class Config:
     REVIEWS_TABLE = os.getenv('REVIEWS_TABLE', 'Reviews')
     MOVIES_TABLE = os.getenv('MOVIES_TABLE', 'Movies')
     
-    # AWS Service Endpoints (for local development/testing)
-    DYNAMODB_ENDPOINT_URL = os.getenv('DYNAMODB_ENDPOINT_URL')
-    S3_ENDPOINT_URL = os.getenv('S3_ENDPOINT_URL')
-    
     # S3 Configuration for Embeddings
-    EMBEDDINGS_BUCKET = os.getenv('EMBEDDINGS_BUCKET')
-    EMBEDDINGS_OUTPUT_FILE = os.getenv('EMBEDDINGS_OUTPUT_FILE', 'embeddings.jsonl')
+    EMBEDDINGS_BUCKET = os.getenv('EMBEDDINGS_BUCKET', 'movieembeddings')
+    EMBEDDINGS_OUTPUT_FILE = os.getenv('EMBEDDINGS_OUTPUT_FILE', 'embeddings.npy')
     
     # ML Model Configuration
     EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
     
     # API Configuration
-    MAX_RESULTS = int(os.getenv('MAX_RESULTS', '50'))
+    MAX_RESULTS = int(os.getenv('MAX_RESULTS', '100'))
     DEFAULT_TOP_K = int(os.getenv('DEFAULT_TOP_K', '10'))
     
     # Feature Flags
@@ -55,7 +51,7 @@ class Config:
         required_vars = []
         
         # Check critical configuration
-        if not cls.JWT_SECRET or cls.JWT_SECRET == 'your-jwt-secret-key':
+        if not cls.JWT_SECRET or cls.JWT_SECRET == 'P1ywar3K75qD4dfGBFjsJrfbQRLixtZBZKPPYZjJFbQej9pqudua23GDICpfOVihN_2zHdU-hU1pVl57rXAu3Q':
             required_vars.append('JWT_SECRET')
         
         # For production, embeddings bucket should be configured
