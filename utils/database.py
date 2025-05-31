@@ -5,11 +5,9 @@ Provides centralized access to DynamoDB tables using shared configuration
 import boto3
 from .config import Config
 
-# Initialize DynamoDB resource with optional endpoint URL for local development
+# Initialize DynamoDB resource
 def get_dynamodb_resource():
     """Get DynamoDB resource with proper configuration"""
-    if Config.DYNAMODB_ENDPOINT_URL:
-        return boto3.resource('dynamodb', endpoint_url=Config.DYNAMODB_ENDPOINT_URL)
     return boto3.resource('dynamodb')
 
 # Initialize DynamoDB resource
