@@ -1,0 +1,658 @@
+openapi: 3.0.0
+info:
+  title: Movie Recommender API
+  description: API for the Movie Recommender System
+  version: 1.0.0
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com/prod
+    variables:
+      apiId:
+        description: API Gateway ID
+        default: your-api-id
+      region:
+        description: AWS Region
+        default: eu-west-1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Movie:
+      type: object
+      properties:
+        movie_id:
+          type: string
+          example: "123"
+        title:
+          type: string
+          example: "Mission: Impossible"
+        overview:
+          type: string
+          example: "An American agent..."
+        vote_average:
+          type: number
+          format: float
+          example: 7.5
+        release_year:
+          type: integer
+          example: 1996
+        poster_path:
+          type: string
+          example: "/path/to/poster.jpg"
+        score:
+          type: number
+          format: float
+          example: 0.95
+        genres:
+          type: array
+          items:
+            type: string
+          example: ["Adventure", "Action", "Thriller"]
+        rating:
+          type: number
+          format: float
+          example: 4.5
+          description: User's rating for this movie (only present in reviews)
+    
+    FavoriteItem:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: "user123"
+        movie_id:
+          type: string
+          example: "456"
+        created_at:
+          type: integer
+          example: 1620000000
+    
+    ReviewItem:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: "user123"
+        movie_id:
+          type: string
+          example: "456"
+        rating:
+          type: number
+          format: float
+          example: 4.5
+        timestamp:
+          type: integer
+          example: 1620000000
+    
+    ActivityItem:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: "user123"
+        timestamp:
+          type: integer
+          example: 1620000000
+        action:
+          type: string
+          example: "add_favorite"
+        data:
+          type: object
+          example: {"movie_id": "456"}
+
+paths:
+  /search:
+    post:
+      summary: Search for movies using semantic search
+      description: Perform semantic search for movies based on a text query using AI embeddings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  example: "action movies with Tom Cruise"
+                  description: Text query for semantic movie search
+                top_k:
+                  type: integer
+                  default: 10
+                  example: 10
+                  description: Number of results to return
+      responses:
+        '200':
+          description: Successful search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+        '400':
+          description: Missing or invalid query parameter
+
+  /content:
+    post:
+      summary: Get content-based recommendations
+      description: Get movie recommendations based on content similarity from a list of movie IDs
+      requestBody: 
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - movie_ids
+              properties:
+                movie_ids:
+                  type: array
+                  items:
+                    type: string
+                  example: ["123", "456"]
+                  description: List of movie IDs to base recommendations on
+                top_k:
+                  type: integer
+                  default: 10
+                  example: 10
+                  description: Number of recommendations to return
+      responses:
+        '200':
+          description: Content-based recommendations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+        '400':
+          description: Missing or invalid movie_ids parameter
+
+  /collaborative:
+    post:
+      summary: Get collaborative filtering recommendations
+      description: Get personalized movie recommendations based on collaborative filtering using user preferences
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                top_k:
+                  type: integer
+                  default: 10
+                  example: 10
+                  description: Number of recommendations to return
+      responses:
+        '200':
+          description: Collaborative filtering recommendations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+        '401':
+          description: Authentication required
+
+  /similar:
+    post:
+      summary: Get similar movies
+      description: Get movies similar to a specific movie based on content features
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - movie_id
+              properties:
+                movie_id:
+                  type: string
+                  example: "123"
+                  description: ID of the movie to find similar movies for
+                top_k:
+                  type: integer
+                  default: 10
+                  example: 10
+                  description: Number of similar movies to return
+      responses:
+        '200':
+          description: Similar movies retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Movie'
+        '400':
+          description: Missing or invalid movie_id parameter
+
+  /auth/login:
+    post:
+      summary: User login
+      description: Authenticate user with email and password to get JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  example: "password123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "jwt-token-here"
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "user123"
+                      name:
+                        type: string
+                        example: "John Doe"
+                      email:
+                        type: string
+                        format: email
+                        example: "user@example.com"
+                      created_at:
+                        type: integer
+                        example: 1620000000
+        '400':
+          description: Email and password are required
+        '401':
+          description: Invalid credentials
+
+  /auth/register:
+    post:
+      summary: User registration
+      description: Register a new user account with name, email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - email
+                - password
+              properties:
+                name:
+                  type: string
+                  example: "John Doe"
+                email:
+                  type: string
+                  format: email
+                  example: "user@example.com"
+                password:
+                  type: string
+                  format: password
+                  example: "password123"
+                  description: Must be at least 8 characters
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "jwt-token-here"
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "user123"
+                      name:
+                        type: string
+                        example: "John Doe"
+                      email:
+                        type: string
+                        format: email
+                        example: "user@example.com"
+                      created_at:
+                        type: integer
+                        example: 1620000000
+        '400':
+          description: Name, email, and password are required OR Password must be at least 8 characters
+        '409':
+          description: Email already exists
+
+  /auth/refresh:
+    post:
+      summary: Refresh JWT token
+      description: Get a new JWT token using an existing valid token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: "new-jwt-token-here"
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        example: "user123"
+                      name:
+                        type: string
+                        example: "John Doe"
+                      email:
+                        type: string
+                        format: email
+                        example: "user@example.com"
+                      created_at:
+                        type: integer
+                        example: 1620000000
+        '401':
+          description: Invalid token
+
+  /user-data/favorites:
+    get:
+      summary: Get user's favorite movies
+      description: Retrieve all movies marked as favorites by the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of favorite movies with full movie details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FavoriteItem'
+        '401':
+          description: Authentication required
+    post:
+      summary: Add movie to favorites
+      description: Add a movie to the user's favorites list
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - movieId
+              properties:
+                movieId:
+                  type: string
+                  example: "123"
+                  description: ID of the movie to add to favorites
+      responses:
+        '200':
+          description: Movie added to favorites successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Movie added to favorites"
+        '400':
+          description: Movie ID is required
+        '401':
+          description: Authentication required
+
+  /user-data/favorites/toggle/{movieId}:
+    get:
+      summary: Check if movie is in favorites
+      description: Check if a specific movie is in the user's favorites list
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: movieId
+          required: true
+          schema:
+            type: string
+          description: ID of the movie to check
+      responses:
+        '200':
+          description: Favorite status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isFavorite:
+                    type: boolean
+                    example: true
+        '400':
+          description: Movie ID is required
+        '401':
+          description: Authentication required
+
+  /user-data/favorites/{movieId}:
+    delete:
+      summary: Remove movie from favorites
+      description: Remove a movie from the user's favorites list
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: movieId
+          required: true
+          schema:
+            type: string
+          description: ID of the movie to remove from favorites
+      responses:
+        '200':
+          description: Movie removed from favorites successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Movie removed from favorites"
+        '400':
+          description: Movie ID is required
+        '401':
+          description: Authentication required
+
+  /user-data/reviews:
+    get:
+      summary: Get user's reviewed movies
+      description: Retrieve all movies reviewed by the authenticated user with their ratings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of reviewed movies with ratings and full movie details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Movie'
+        '401':
+          description: Authentication required
+    post:
+      summary: Add movie review
+      description: Add a review/rating for a movie
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - movieId
+              properties:
+                movieId:
+                  type: string
+                  example: "123"
+                  description: ID of the movie to review
+                rating:
+                  type: number
+                  format: float
+                  example: 4.5
+                  description: User's rating for the movie
+      responses:
+        '200':
+          description: Review added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Review added successfully"
+        '400':
+          description: Movie ID is required
+        '401':
+          description: Authentication required
+
+  /user-data/reviews/toggle/{movieId}:
+    get:
+      summary: Check if movie is reviewed
+      description: Check if a specific movie has been reviewed by the user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: movieId
+          required: true
+          schema:
+            type: string
+          description: ID of the movie to check
+      responses:
+        '200':
+          description: Review status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  isReviewed:
+                    type: boolean
+                    example: true
+        '400':
+          description: Movie ID is required
+        '401':
+          description: Authentication required
+
+  /user-data/reviews/{movieId}:
+    delete:
+      summary: Remove movie review
+      description: Remove a review for a movie from the user's review list
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: movieId
+          required: true
+          schema:
+            type: string
+          description: ID of the movie to remove review for
+      responses:
+        '200':
+          description: Review removed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Movie removed from reviews"
+        '400':
+          description: Movie ID is required
+        '401':
+          description: Authentication required
+
+  /user/activity:
+    get:
+      summary: Get user activity history
+      description: Retrieve the authenticated user's activity log (favorites, reviews, etc.)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User activity history retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityItem'
+        '401':
+          description: Authentication required
+
+  /user/account:
+    delete:
+      summary: Delete user account
+      description: Permanently delete the user account and all associated data
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Account deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Account successfully deleted"
+        '401':
+          description: Authentication required
