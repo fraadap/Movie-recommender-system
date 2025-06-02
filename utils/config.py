@@ -3,7 +3,6 @@ Shared Configuration Module for Movie Recommendation System
 Centralizes all environment variable loading and configuration management
 """
 import os
-import sys
 
 class Config:
     """

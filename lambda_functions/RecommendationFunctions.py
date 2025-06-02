@@ -1,5 +1,4 @@
 import json
-import os
 from boto3.dynamodb.conditions import Key
 import numpy as np
 import boto3
