@@ -46,7 +46,7 @@ def handle_login(event):
                 'id': user.get('user_id'),
                 'name': user.get('name'),
                 'email': user.get('email'),
-                'created_at': user.get('created_at')
+                'created_at': int(user.get('created_at'))
             }
         })
     
@@ -163,7 +163,7 @@ def handle_refresh(event):
                 'id': user.get('user_id'),
                 'name': user.get('name'),
                 'email': user.get('email'),
-                'created_at': user.get('created_at')
+                'created_at': int(user.get('created_at'))
             }
         })
     

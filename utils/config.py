@@ -11,7 +11,7 @@ class Config:
     """
     
     # JWT Configuration
-    JWT_SECRET = os.getenv('JWT_SECRET', 'P1ywar3K75qD4dfGBFjsJrfbQRLixtZBZKPPYZjJFbQej9pqudua23GDICpfOVihN_2zHdU-hU1pVl57rXAu3Q')
+    JWT_SECRET = os.getenv('JWT_SECRET')
     JWT_EXPIRY = int(os.getenv('JWT_EXPIRY', '7200'))  # 2 hours in seconds
     
     # DynamoDB Table Names

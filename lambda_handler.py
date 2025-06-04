@@ -1,6 +1,6 @@
-import MovieAuthFunction as maf
-import MovieUserDataFunction as mudf
-import RecommendationFunctions as rf
+import lambda_functions.MovieAuthFunction as maf
+import lambda_functions.MovieUserDataFunction as mudf
+import lambda_functions.RecommendationFunctions as rf
 from utils.config import Config
 from utils.utils_function import build_response
 
@@ -18,7 +18,7 @@ def lambda_handler(event, context):
         if path.endswith('/user-data/favorites') and http_method == 'GET':
             return mudf.handle_get_favorites(event)
         elif path.endswith('/user-data/favorites') and http_method == 'POST':
-            return maf.handle_add_favorite(event)
+            return mudf.handle_add_favorite(event)
         elif '/user-data/favorites/' in path and http_method == 'DELETE':
             return mudf.handle_remove_favorite(event)
         elif '/user-data/favorites/toggle/' in path and http_method == 'GET':
