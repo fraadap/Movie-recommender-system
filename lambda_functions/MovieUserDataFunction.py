@@ -3,7 +3,7 @@ import time
 from boto3.dynamodb.conditions import Key
 
 from utils.config import Config
-from utils.utils_function import get_authenticated_user, build_response, sanitize_input, log_user_activity
+from utils.utils_function import get_authenticated_user, build_response, sanitize_input, log_user_activity, get_item_converted
 import utils.database as db
 
 def handle_get_favorites(event):
@@ -31,10 +31,11 @@ def handle_get_favorites(event):
             movie = resp.get('Item')
             if movie:
                 results.append(movie)
-                
+
+        results = get_item_converted(results)
         # Format response
         return build_response(200, {
-            'movies': favorite_items
+            'movies': results
         })
     
     except Exception as e:
@@ -376,7 +377,7 @@ def handle_get_reviews(event):
         )
 
         review_items = response.get('Items', [])
-        
+
         results = []
         for item in review_items:
             mid = item.get('movie_id')
@@ -386,7 +387,8 @@ def handle_get_reviews(event):
             if movie:
                 movie['rating'] = score
                 results.append(movie)
-
+                
+        results = get_item_converted(results)
         # Format response
         return build_response(200, {
             'movies': results

@@ -5,7 +5,7 @@ import boto3
 from sentence_transformers import SentenceTransformer
 
 from utils.config import Config
-from utils.utils_function import get_authenticated_user, build_response
+from utils.utils_function import get_authenticated_user, build_response, get_item_converted
 import utils.database as db
 
 # Global variables for caching
@@ -37,9 +37,10 @@ def handle_semantic_search(event):
             if movie:
                 movie['score'] = score
                 movies.append(movie)
-        
+
+        movies = get_item_converted(movies)
         return build_response(200, movies)
-        
+
     except json.JSONDecodeError:
         return build_response(400, {'error': 'Invalid JSON in request body'})
     except Exception as e:
@@ -70,9 +71,10 @@ def handle_content_based_search(event):
             if movie:
                 movie['score'] = score
                 movies.append(movie)
-        
+
+        movies = get_item_converted(movies)
         return build_response(200, movies)
-        
+
     except json.JSONDecodeError:
         return build_response(400, {'error': 'Invalid JSON in request body'})
     except Exception as e:
@@ -106,9 +108,10 @@ def handle_collaborative_search(event):
             if movie:
                 movie['score'] = score
                 movies.append(movie)
-        
+
+        movies = get_item_converted(movies)
         return build_response(200, movies)
-        
+
     except json.JSONDecodeError:
         return build_response(400, {'error': 'Invalid JSON in request body'})
     except Exception as e:
@@ -139,7 +142,7 @@ def handle_similar_search(event):
             if movie:
                 movie['score'] = score
                 movies.append(movie)
-        
+        movies = get_item_converted(movies)
         return build_response(200, movies)
         
     except json.JSONDecodeError:
@@ -155,7 +158,9 @@ def get_movie_metadata(movie_id):
     """
     try:
         resp = db.movies_table.get_item(Key={'movie_id': str(movie_id)})
-        return resp.get('Item')
+        movie = resp.get('Item')
+        movie = get_item_converted(movie)
+        return movie
     except Exception as e:
         print(f"Error fetching movie metadata for {movie_id}: {str(e)}")
         return None
@@ -275,6 +280,7 @@ def recommend_collaborative(user_id, top_k):
                 
         results = [(mid, scores[mid] / weights[mid]) for mid in scores if weights.get(mid, 0) > 0]
         results.sort(key=lambda x: x[1], reverse=True)
+        results = get_item_converted(results)
         return results[:top_k]
     except Exception as e:
         print(f"Error in collaborative filtering recommendation: {str(e)}")
@@ -309,7 +315,9 @@ def load_embeddings():
 def get_model():
     global _model
     if _model is None:
-        _model = SentenceTransformer(Config.EMBEDDING_MODEL)
+        pass
+        # CARICAMENTO DEL MODELLO DA S3
+        #_model = SentenceTransformer(Config.EMBEDDING_MODEL)
     return _model
 
 

@@ -12,6 +12,7 @@ import hashlib
 import os
 from .config import Config
 from . import database as db
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -233,3 +234,26 @@ def sanitize_input(input_string, max_length=None):
         sanitized = sanitized[:max_length]
     
     return sanitized
+
+def convert_decimals(obj):
+    if isinstance(obj, list):
+        return [convert_decimals(o) for o in obj]
+    elif isinstance(obj, dict):
+        return {k: convert_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    else:
+        return obj
+    
+def get_item_converted(item):
+    """
+    Convert DynamoDB item with Decimal values to standard Python types
+    Args:
+        item: DynamoDB item (dict)
+    Returns:
+        dict: Converted item with Decimal values replaced
+    """
+    if not item:
+        return {}
+    
+    return convert_decimals(item)
