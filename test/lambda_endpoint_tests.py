@@ -144,7 +144,7 @@ class LambdaEndpointTester:
         print("3. Testing check favorite status...")
         check_favorite_payload = {
             "httpMethod": "GET",
-            "path": "/user-data/favorites/12345/status",
+            "path": "/user-data/favorites/toggle/12345",
             "headers": {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.jwt_token}"
@@ -203,7 +203,7 @@ class LambdaEndpointTester:
         print("6. Testing get reviews...")
         get_reviews_payload = {
             "httpMethod": "GET",
-            "path": "/user-data/reviews/12345",
+            "path": "/user-data/reviews",
             "headers": {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.jwt_token}"
@@ -221,7 +221,7 @@ class LambdaEndpointTester:
         print("7. Testing get user activity...")
         activity_payload = {
             "httpMethod": "GET",
-            "path": "/user-data/activity",
+            "path": "/user/activity",
             "headers": {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self.jwt_token}"
