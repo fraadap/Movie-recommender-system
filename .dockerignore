@@ -1,0 +1,193 @@
+# =============================================================================
+# Movie Recommender System - Optimized .dockerignore
+# =============================================================================
+# Esclude tutto ciò che non è necessario per Lambda runtime
+# Risultato: riduce build context da ~500MB a ~50MB
+
+# === FRONTEND (non necessario per Lambda backend) ===
+frontend/
+static/
+public/
+dist/
+node_modules/
+package*.json
+yarn.lock
+*.vue
+*.scss
+*.css
+*.js
+*.ts
+!utils/*.js
+!lambda_functions/*.js
+
+# === DOCUMENTATION ===
+doc/
+docs/
+README.md
+*.md
+!model/README.md
+*.txt
+!requirements.txt
+*.tex
+*.pdf
+CHANGELOG*
+LICENSE*
+
+# === DEVELOPMENT & TESTING ===
+test/
+tests/
+*_test.py
+test_*.py
+pytest.ini
+.pytest_cache/
+coverage/
+.coverage
+.nyc_output/
+lambda_endpoint_tests.py
+
+# === INITIAL SETUP & SCRIPTS ===
+initial_setup/
+scripts/
+setup/
+deploy/
+*.bat
+*.sh
+*.ps1
+api_gateway_setup.py
+create_table.py
+data_processor.py
+generate_embeddings.py
+
+# === VERSION CONTROL ===
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# === IDE & EDITOR FILES ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-*
+
+# === PYTHON CACHE & VIRTUAL ENVIRONMENTS ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.env
+pip-log.txt
+pip-delete-this-directory.txt
+
+# === BUILD ARTIFACTS ===
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+
+# === TESTING & COVERAGE ===
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+htmlcov/
+
+# === LOGS ===
+*.log
+logs/
+log/
+
+# === DOCKER ===
+Dockerfile.dev
+docker-compose*.yml
+.dockerignore.bak
+
+# === AWS & SECRETS ===
+.aws/
+*.pem
+*.key
+*.p12
+.env.*
+secrets.json
+
+# === JUPYTER & DATA SCIENCE ===
+.ipynb_checkpoints/
+*.ipynb
+
+# === TEMPORARY FILES ===
+*.tmp
+*.temp
+*.bak
+*.backup
+.tmp/
+
+# === LARGE DATA FILES ===
+*.csv
+*.parquet
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+data/
+datasets/
+
+# === MEDIA FILES ===
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.svg
+*.mp4
+*.avi
+*.mov
+*.webm
+
+# === COMPRESSION FILES ===
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# === OS SPECIFIC ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# === KEEP THESE ESSENTIAL FILES ===
+# The following are INCLUDED (not ignored):
+# - lambda_functions/ (main Lambda code)
+# - utils/ (utilities and database)
+# - model/ (pre-trained model files)
+# - requirements.txt (Python dependencies)
+# - Dockerfile (for reference)
+
+# === DEBUG: Show what's included ===
+# To debug what's being included, run:
+# docker build --no-cache -f Dockerfile --target builder -t debug-build .
+# docker run --rm debug-build find /build -type f | head -20

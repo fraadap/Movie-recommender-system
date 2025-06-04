@@ -316,14 +316,14 @@ def get_model():
 def get_s3_client():
     global _s3_client
     if _s3_client is None:
-        _s3_client = boto3.client("s3", endpoint_url=Config.S3_ENDPOINT_URL) if Config.S3_ENDPOINT_URL else boto3.client("s3")
+        _s3_client = boto3.client("s3")
     return _s3_client
 
 
 def get_dynamodb():
     global _dynamodb
     if _dynamodb is None:
-        _dynamodb = boto3.resource("dynamodb", endpoint_url=Config.DYNAMODB_ENDPOINT_URL) if Config.DYNAMODB_ENDPOINT_URL else boto3.resource("dynamodb")
+        _dynamodb = boto3.resource("dynamodb")
     return _dynamodb
 
 
