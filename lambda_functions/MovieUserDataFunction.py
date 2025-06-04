@@ -1,5 +1,6 @@
 import json
 import time
+from decimal import Decimal
 from boto3.dynamodb.conditions import Key
 
 from utils.config import Config
@@ -289,7 +290,7 @@ def handle_get_activity(event):
         )
         
         activity_items = response.get('Items', [])
-        
+        activity_items = get_item_converted(activity_items)
         # Format response
         return build_response(200, {
             'activities': activity_items
@@ -328,12 +329,11 @@ def handle_add_review(event):
         user = get_authenticated_user(event)
         if not user:
             return build_response(401, {'error': 'Authentication required'})
-        
         # Parse request body
         request_body = json.loads(event.get('body', '{}'))
         movie_id = request_body.get('movieId')
-        rating = request_body.get('rating')
-        
+        rating = Decimal(str(request_body.get('rating', 0)))
+
         if not movie_id:
             return build_response(400, {'error': 'Movie ID is required'})
         
