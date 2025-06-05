@@ -20,13 +20,16 @@ class Config:
     ACTIVITY_TABLE = os.getenv('ACTIVITY_TABLE', 'MovieRecommender_Activity')
     REVIEWS_TABLE = os.getenv('REVIEWS_TABLE', 'Reviews')
     MOVIES_TABLE = os.getenv('MOVIES_TABLE', 'Movies')
-    
     # S3 Configuration for Embeddings
     EMBEDDINGS_BUCKET = os.getenv('EMBEDDINGS_BUCKET', 'movieembeddings')
     EMBEDDINGS_OUTPUT_FILE = os.getenv('EMBEDDINGS_OUTPUT_FILE', 'embeddings.npy')
     
     # ML Model Configuration
     EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+    MODEL_BUCKET = os.getenv('MODEL_BUCKET', 'movieembeddings')
+    MODEL_CONFIG_FILE = os.getenv('MODEL_CONFIG_FILE', 'model_onnx/config.json')
+    MODEL_ONNX_FILE = os.getenv('MODEL_ONNX_FILE', 'model_onnx/model.onnx')
+    MODEL_TOKENIZER_FILE = os.getenv('MODEL_TOKENIZER_FILE', 'model_onnx/tokenizer.json')
     
     # API Configuration
     MAX_RESULTS = int(os.getenv('MAX_RESULTS', '100'))

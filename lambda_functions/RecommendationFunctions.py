@@ -2,7 +2,10 @@ import json
 from boto3.dynamodb.conditions import Key
 import numpy as np
 import boto3
-from sentence_transformers import SentenceTransformer
+import os
+import tempfile
+import onnxruntime
+from tokenizers import Tokenizer
 
 from utils.config import Config
 from utils.utils_function import get_authenticated_user, build_response, get_item_converted
@@ -11,6 +14,9 @@ import utils.database as db
 # Global variables for caching
 _embeddings = None
 _model = None
+_tokenizer = None
+_model_config = None
+_onnx_session = None
 _s3_client = None
 _dynamodb = None
 
@@ -170,11 +176,45 @@ def get_movie_metadata(movie_id):
 
 def recommend_semantic(query, top_k):
     """
-    Recommend movies based on semantic similarity to query
+    Recommend movies based on semantic similarity to query using ONNX model
     """
     try:
-        model = get_model()
-        query_emb = model.encode(query).tolist()
+        # Get ONNX model components
+        onnx_session, tokenizer, model_config = get_model()
+        
+        # Encode the query using the ONNX model
+        encoded = tokenizer.encode(query)
+        
+        # Prepare inputs for ONNX model
+        input_ids = np.array([encoded.ids], dtype=np.int64)
+        attention_mask = np.array([encoded.attention_mask], dtype=np.int64)
+        token_type_ids = np.array([encoded.type_ids], dtype=np.int64)
+        
+        onnx_inputs = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids
+        }
+        
+        # Run inference
+        onnx_outputs = onnx_session.run(None, onnx_inputs)
+        
+        # Extract embeddings (typically from last hidden state)
+        # For sentence transformers, we usually take the mean of token embeddings
+        last_hidden_state = onnx_outputs[0]  # Shape: (batch_size, seq_len, hidden_size)
+        
+        # Apply attention mask and compute mean pooling
+        attention_mask_expanded = np.expand_dims(attention_mask, -1)
+        masked_embeddings = last_hidden_state * attention_mask_expanded
+        sum_embeddings = np.sum(masked_embeddings, axis=1)
+        sum_mask = np.sum(attention_mask, axis=1, keepdims=True)
+        query_embedding = (sum_embeddings / np.maximum(sum_mask, 1e-9))[0]  # Take first batch item
+        
+        # Normalize the embedding
+        query_embedding = query_embedding / np.linalg.norm(query_embedding)
+        query_emb = query_embedding.tolist()
+        
+        # Compare with precomputed embeddings
         embed_map = load_embeddings()
         sims = [(mid, cosine_similarity(query_emb, emb)) for mid, emb in embed_map.items()]
         sims.sort(key=lambda x: x[1], reverse=True)
@@ -313,12 +353,74 @@ def load_embeddings():
 
 
 def get_model():
-    global _model
-    if _model is None:
-        pass
-        # CARICAMENTO DEL MODELLO DA S3
-        #_model = SentenceTransformer(Config.EMBEDDING_MODEL)
-    return _model
+    """
+    Load ONNX model, tokenizer, and config from S3
+    """
+    global _onnx_session, _tokenizer, _model_config
+    
+    if _onnx_session is None or _tokenizer is None or _model_config is None:
+        try:
+            if not Config.MODEL_BUCKET:
+                raise ValueError("MODEL_BUCKET not configured")
+            
+            s3 = get_s3_client()
+            
+            # Create temporary directory for model files
+            temp_dir = tempfile.mkdtemp()
+            
+            try:
+                # Download model config
+                config_path = os.path.join(temp_dir, "config.json")
+                s3.download_file(Config.MODEL_BUCKET, Config.MODEL_CONFIG_FILE, config_path)
+                
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    _model_config = json.load(f)
+                
+                # Download tokenizer
+                tokenizer_path = os.path.join(temp_dir, "tokenizer.json")
+                s3.download_file(Config.MODEL_BUCKET, Config.MODEL_TOKENIZER_FILE, tokenizer_path)
+                
+                _tokenizer = Tokenizer.from_file(tokenizer_path)
+                  # Configure tokenizer padding and truncation
+                max_seq_length = _model_config.get("max_position_embeddings", 128)
+                pad_token_id = _tokenizer.token_to_id("[PAD]")
+                if pad_token_id is None:
+                    print("Warning: '[PAD]' token not found. Assuming ID 0 for padding.")
+                    pad_token_id = 0
+                
+                _tokenizer.enable_truncation(max_length=max_seq_length)
+                _tokenizer.enable_padding(
+                    direction='right',
+                    length=max_seq_length,
+                    pad_id=pad_token_id,
+                    pad_token='[PAD]',
+                    pad_type_id=0
+                )
+                
+                # Download and load ONNX model
+                model_path = os.path.join(temp_dir, "model.onnx")
+                s3.download_file(Config.MODEL_BUCKET, Config.MODEL_ONNX_FILE, model_path)
+                
+                _onnx_session = onnxruntime.InferenceSession(
+                    model_path, 
+                    providers=['CPUExecutionProvider']
+                )
+                
+                print("ONNX model, tokenizer, and config loaded successfully from S3")
+                
+            finally:
+                # Clean up temporary files
+                try:
+                    import shutil
+                    shutil.rmtree(temp_dir)
+                except Exception as cleanup_error:
+                    print(f"Warning: Could not clean up temp directory: {cleanup_error}")
+            
+        except Exception as e:
+            print(f"Error loading ONNX model from S3: {str(e)}")
+            raise
+    
+    return _onnx_session, _tokenizer, _model_config
 
 
 def get_s3_client():
