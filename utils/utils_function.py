@@ -48,8 +48,10 @@ def get_authenticated_user(event):
         dict: User object if valid token, None otherwise
     """
     headers = event.get('headers', {})
-    auth_header = headers.get('Authorization', '')
-    
+    auth_header = headers.get('authorization', '')
+    if not auth_header:
+        auth_header = headers.get('Authorization', '')
+        
     if not auth_header.startswith('Bearer '):
         return None
     

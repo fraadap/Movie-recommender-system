@@ -11,9 +11,14 @@ def lambda_handler(event, context):
     """
     try:
         # Extract path and HTTP method
-        path = event.get('path', '')
-        http_method = event.get('httpMethod', '')
-        
+
+        path = event.get("requestContext", {}).get("http", {}).get("path", "")
+        http_method = event.get("requestContext", {}).get("http", {}).get("method", "")
+        if not http_method:
+            path = event.get('path', '')
+            http_method = event.get('httpMethod', '')
+
+
         # Route request to appropriate handler
         if path.endswith('/user-data/favorites') and http_method == 'GET':
             return mudf.handle_get_favorites(event)
@@ -49,11 +54,13 @@ def lambda_handler(event, context):
             return rf.handle_collaborative_search(event)        
         elif path.endswith('/similar') and http_method == 'POST':
             return rf.handle_similar_search(event)
+        elif path.endswith('/'):
+            return build_response(200, {'message': 'Hi, welcome to this API'})
         else:
-            return build_response(404, {'error': 'Not found'})
+            return build_response(404, {'error': 'Path not found '+ path})
     
     except Exception as e:
         print(f"Error processing request: {str(e)}")
-        return build_response(500, {'error': 'Internal server error'})
+        return build_response(500, {'error': 'Internal server error ' + str(e)})
 
         
