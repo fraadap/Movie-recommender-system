@@ -1,25 +1,128 @@
 # Movie Recommender System
 
-## Overview
-A comprehensive cloud-based movie recommendation system built on AWS, featuring semantic search, content-based filtering, collaborative filtering, and user management capabilities. The system provides personalized movie recommendations through advanced AI embeddings and machine learning algorithms.
+A serverless movie recommendation system built on AWS, featuring semantic search with ONNX models, collaborative filtering, and comprehensive user management capabilities.
 
-## Architecture
-- **Backend**: AWS Lambda functions for serverless computing with **centralized configuration management**
-- **Database**: DynamoDB for scalable data storage
-- **Search**: Semantic search using SentenceTransformers embeddings stored in S3
-- **API**: API Gateway for RESTful endpoints
-- **Frontend**: Vue.js web application
-- **Authentication**: JWT-based user authentication with **shared security utilities**
-- **Configuration**: Centralized configuration module for environment variables and settings
+## Features
 
-## Prerequisites
-- Python 3.9+
-- Node.js 14+ (for frontend)
-- AWS CLI configured with appropriate credentials
-- AWS account with permissions for DynamoDB, Lambda, S3, and API Gateway
-- Install dependencies: `pip install -r requirements.txt`
+- **Semantic Search**: Natural language movie search using ONNX-optimized embeddings stored in S3
+- **Collaborative Filtering**: Personalized recommendations based on user ratings and behavior
+- **Content-Based Filtering**: Recommendations based on movie similarity using weighted embeddings
+- **User Management**: JWT authentication, favorites, reviews, and activity tracking
+- **Scalable Architecture**: Single Lambda function with centralized routing and configuration
+- **ONNX Model Support**: Optimized inference without heavy ML dependencies
+
+## Architecture Overview
+
+The system uses a **single Lambda function** architecture with:
+- **Single Entry Point**: `lambda_handler.py` routes all API requests
+- **Centralized Configuration**: `utils/config.py` manages all environment variables
+- **DynamoDB**: 5 tables for users, movies, reviews, favorites, and activity
+- **S3 Storage**: Movie embeddings (.npz format) and ONNX models
+- **HTTP API Gateway**: AWS HTTP API (not REST) for endpoint management
+- **Lambda Layers**: Optimized dependency management
+
+### Lambda Layers Structure
+- **Layer 1**: `PyJWT==2.8.0`, `bcrypt==4.1.2`, `onnxruntime`, `tokenizers`
+- **Layer 2**: `numpy<1.27.0`
+
+## Quick Start
+
+1. **Setup AWS Infrastructure**
+   ```cmd
+   cd initial_setup
+   python create_table.py
+   ```
+
+2. **Deploy Single Lambda Function**
+   ```cmd
+   REM Package entire application
+   powershell Compress-Archive -Path lambda_handler.py,lambda_functions,utils,requirements.txt -DestinationPath movie-recommender.zip
+   aws lambda create-function --function-name Movie_recommender_system --runtime python3.9 --zip-file fileb://movie-recommender.zip
+   ```
+
+3. **Configure Environment Variables**
+   ```cmd
+   set JWT_SECRET=your-secret-key
+   set EMBEDDINGS_BUCKET=movieembeddings
+   set MODEL_BUCKET=movieembeddings
+   ```
+
+4. **Setup API Gateway**
+   ```cmd
+   cd initial_setup
+   python api_gateway_setup.py
+   ```
+
+## API Endpoints
+
+All endpoints are routed through a single Lambda function via HTTP API Gateway:
+
+### Authentication
+- `POST /auth/register` - User registration with email/password
+- `POST /auth/login` - User login returning JWT token
+- `POST /auth/refresh` - Refresh JWT token
+
+### Search & Recommendations
+- `POST /search` - Semantic search using ONNX model inference
+- `POST /content` - Content-based recommendations from movie IDs with ratings
+- `POST /collaborative` - Collaborative filtering (requires authentication)
+- `POST /similar` - Find similar movies to a given movie
+
+### User Data Management
+- `GET /user-data/favorites` - Get user's favorite movies
+- `POST /user-data/favorites` - Add movie to favorites
+- `DELETE /user-data/favorites/{movieId}` - Remove from favorites
+- `GET /user-data/favorites/toggle/{movieId}` - Check if movie is favorited
+- `POST /user-data/reviews` - Add movie review with rating
+- `GET /user-data/reviews` - Get user's reviews
+- `DELETE /user-data/reviews/{movieId}` - Remove review
+- `GET /user-data/reviews/toggle/{movieId}` - Check if movie is reviewed
+- `GET /user/activity` - Get user activity history
+- `DELETE /user/account` - Delete user account
+
+## Data Format
+
+### Embeddings
+- **Format**: `.npz` (NumPy compressed archive)
+- **Structure**: 385 columns (384 float embeddings + 1 string movie_id)
+- **Storage**: S3 bucket `movieembeddings`
+
+### ONNX Models
+- **Model Files**: `config.json`, `model.onnx`, `tokenizer.json`, `vocab.txt`
+- **Storage**: S3 bucket `movieembeddings/model_onnx/`
+- **Purpose**: Optimized inference without sentence-transformers dependency
+
+## Database Schema
+
+### Tables (DynamoDB)
+1. **Movies** - Movie metadata (title, overview, genres, etc.)
+2. **Reviews** - User ratings and reviews (user_id, movie_id, rating, timestamp)
+3. **MovieRecommender_Users** - User authentication (email, username, password_hash, salt)
+4. **MovieRecommender_Favorites** - User favorites (user_id, movie_id, created_at)
+5. **MovieRecommender_Activity** - User activity logs (user_id, timestamp, action, data)## Development
+
+For detailed setup instructions, see:
+- [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) - Complete deployment walkthrough
+- [API Reference](api.yaml) - OpenAPI 3.0 specification
+- [System Architecture](files.txt) - Detailed component overview
+
+## Configuration
+
+All environment variables are managed centrally in `utils/config.py`:
+
+```python
+# Required
+JWT_SECRET = "your-jwt-secret"
+EMBEDDINGS_BUCKET = "movieembeddings"
+
+# Optional (with defaults)
+JWT_EXPIRY = 7200  # 2 hours
+MAX_RESULTS = 100
+DEFAULT_TOP_K = 10
+```
 
 ## Dataset
+
 Download the following CSV files from Kaggle and place them in the `initial_setup` directory:
 - `movies_metadata.csv`
 - `credits.csv`
@@ -27,276 +130,42 @@ Download the following CSV files from Kaggle and place them in the `initial_setu
 
 Kaggle dataset: https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset
 
-## Quick Start Guide
-
-### 1. Initial Setup
-
-Navigate to the `initial_setup` directory and create DynamoDB tables:
-
-```cmd
-cd initial_setup
-python create_table.py
-```
-
-This creates the following tables:
-- `Movies` - Movie metadata and details
-- `Reviews` - User ratings and reviews
-- `MovieRecommender_Users` - User accounts
-- `MovieRecommender_Favorites` - User favorite movies
-- `MovieRecommender_Activity` - User activity logs
-
-### 2. Data Processing and Upload
-
-Process and upload movie data to DynamoDB:
-
-```cmd
-python data_processor.py
-```
-
-This will:
-1. Parse `credits.csv` and extract top 5 actors and directors
-2. Parse `movies_metadata.csv`, enrich with genres, budget, and poster paths
-3. Process `ratings_small.csv` for user reviews
-4. Upload all data to respective DynamoDB tables
-
-### 3. Generate and Upload Embeddings
-
-Generate semantic embeddings for movies and upload to S3:
-
-```cmd
-set EMBEDDINGS_BUCKET=your-movie-embeddings-bucket
-python generate_embeddings.py
-```
-
-This creates embeddings using `sentence-transformers/all-MiniLM-L6-v2` model.
-
-### 4. Deploy Lambda Functions
-
-Package and deploy the Lambda functions (see DEPLOYMENT_GUIDE.md for detailed steps):
-
-```cmd
-REM Create packages for each Lambda function
-python api_gateway_setup.py --region your-region
-```
-
-### 5. Access the API
-
-Once deployed, you can access the API endpoints for:
-- Semantic movie search
-- Content-based recommendations
-- Collaborative filtering recommendations
-- User authentication and management
-
-## Database Schema
-
-### Movies Table
-- **Partition Key**: `movie_id` (string)
-- **Attributes**:
-  - `title` (string) - Movie title
-  - `overview` (string) - Movie description
-  - `release_year` (number) - Year of release
-  - `genres` (list) - List of genre strings
-  - `actors` (list) - Top 5 actors
-  - `directors` (list) - Director names
-  - `vote_average` (number) - Average rating
-  - `vote_count` (number) - Number of votes
-  - `budget` (number) - Movie budget
-  - `poster_path` (string) - Poster image path
-  - `adult` (boolean) - Adult content flag
-  - `popularity` (number) - Popularity score
-
-### Reviews Table
-- **Partition Key**: `user_id` (string)
-- **Sort Key**: `movie_id` (string)
-- **Global Secondary Index**: `MovieIndex` (movie_id as partition key)
-- **Attributes**:
-  - `rating` (number) - User rating (1-5)
-  - `timestamp` (number) - Unix timestamp
-
-### User Tables
-- **MovieRecommender_Users**: User account information
-- **MovieRecommender_Favorites**: User favorite movies
-- **MovieRecommender_Activity**: User activity logs
-
-## API Endpoints
-
-The system provides several Lambda functions accessible through API Gateway:
-
-### Search and Recommendations (`search_lambda_router.py`)
-- **POST /search** - Semantic search using AI embeddings
-- **POST /content** - Content-based recommendations
-- **POST /collaborative** - Collaborative filtering (requires authentication)
-- **POST /similar** - Find similar movies
-
-### Authentication (`MovieAuthFunction.py`)
-- **POST /auth/login** - User login
-- **POST /auth/register** - User registration
-- **POST /auth/refresh** - Refresh JWT token
-
-### User Data Management (`MovieUserDataFunction.py`)
-- **GET /user-data/favorites** - Get user's favorite movies
-- **POST /user-data/favorites** - Add movie to favorites
-- **DELETE /user-data/favorites/{movieId}** - Remove from favorites
-- **GET /user-data/favorites/toggle/{movieId}** - Check favorite status
-- **GET /user-data/reviews** - Get user's reviews
-- **POST /user-data/reviews** - Add movie review
-- **DELETE /user-data/reviews/{movieId}** - Remove review
-- **GET /user-data/reviews/toggle/{movieId}** - Check review status
-- **GET /user/activity** - Get user activity history
-- **DELETE /user/account** - Delete user account
-
-See `api.yaml` for complete API documentation.
-
-## Environment Variables
-
-The system now uses a **centralized configuration module** (`utils/config.py`) that manages all environment variables in one place. This provides better maintainability, validation, and consistency across all Lambda functions.
-
-### Configuration Module (`utils/config.py`)
-All environment variables are centrally managed through the `Config` class:
-
-```python
-from utils.config import Config
-
-# JWT Configuration
-Config.JWT_SECRET          # JWT secret key
-Config.JWT_EXPIRY         # Token expiration time
-
-# DynamoDB Tables  
-Config.USERS_TABLE        # User accounts
-Config.FAVORITES_TABLE    # User favorites
-Config.REVIEWS_TABLE      # User reviews
-Config.MOVIES_TABLE       # Movie metadata
-Config.ACTIVITY_TABLE     # User activity logs
-
-# ML and Search Configuration
-Config.EMBEDDINGS_BUCKET      # S3 bucket for embeddings
-Config.EMBEDDING_MODEL        # SentenceTransformer model
-Config.EMBEDDINGS_OUTPUT_FILE # Embeddings file name
-
-# AWS Endpoints (for local testing)
-Config.DYNAMODB_ENDPOINT_URL  # Custom DynamoDB endpoint
-Config.S3_ENDPOINT_URL        # Custom S3 endpoint
-```
-
-### Lambda Environment Variables
-Set these in your Lambda function configurations or local environment:
-
-#### All Lambda Functions (Shared Configuration)
-- `JWT_SECRET`: Secret key for JWT tokens
-- `USERS_TABLE`: Users table name (default: `MovieRecommender_Users`)
-- `FAVORITES_TABLE`: Favorites table name (default: `MovieRecommender_Favorites`)
-- `REVIEWS_TABLE`: Reviews table name (default: `Reviews`)
-- `MOVIES_TABLE`: Movies table name (default: `Movies`)
-- `ACTIVITY_TABLE`: Activity table name (default: `MovieRecommender_Activity`)
-- `EMBEDDINGS_BUCKET`: S3 bucket storing embeddings
-- `EMBEDDINGS_OUTPUT_FILE`: Embeddings file name (default: `embeddings.jsonl`)
-- `EMBEDDING_MODEL`: SentenceTransformer model (default: `sentence-transformers/all-MiniLM-L6-v2`)
-
-#### Development/Local Testing
-- `DYNAMODB_ENDPOINT_URL`: Custom DynamoDB endpoint (for local testing)
-- `S3_ENDPOINT_URL`: Custom S3 endpoint (for local testing)
-
-## Local Testing without AWS Costs
-
-You can test the system locally without incurring AWS charges:
-
-### Using DynamoDB Local
-```cmd
-REM Download and run DynamoDB Local using Docker
-docker run -d -p 8000:8000 --name dynamodb_local amazon/dynamodb-local
-
-REM Set environment variable for local endpoint
-set DYNAMODB_ENDPOINT_URL=http://localhost:8000
-
-REM Create tables and upload data locally
-python create_table.py
-python data_processor.py
-```
-
-### Using LocalStack for S3
-```cmd
-REM Run LocalStack for S3 simulation
-docker run -d -p 4566:4566 --name localstack localstack/localstack
-
-REM Set environment variables
-set S3_ENDPOINT_URL=http://localhost:4566
-set EMBEDDINGS_BUCKET=local-embeddings
-
-REM Generate embeddings locally
-python generate_embeddings.py
-```
-
-## Project Structure
-
-```
-Cloud-Computing/
-├── requirements.txt          # Python dependencies
-├── doc/                     # Documentation
-│   ├── README.md           # This file
-│   ├── DEPLOYMENT_GUIDE.md # Detailed deployment instructions
-│   └── api.yaml           # OpenAPI specification
-├── initial_setup/          # Setup and data processing scripts
-│   ├── create_table.py     # DynamoDB table creation
-│   ├── data_processor.py   # Data ingestion and processing
-│   ├── generate_embeddings.py # Generate AI embeddings
-│   ├── api_gateway_setup.py # API Gateway configuration
-│   └── config.py          # Configuration settings
-├── lambda_functions/       # AWS Lambda function code
-│   ├── handler.py          # Main routing handler (centralized)
-│   ├── search_lambda_router.py # API routing for search endpoints
-│   ├── MovieAuthFunction.py # User authentication
-│   └── MovieUserDataFunction.py # User data management
-├── utils/                  # Shared utility modules
-│   ├── config.py           # **NEW: Centralized configuration management**
-│   ├── database.py         # Database connections and table access
-│   └── utils_function.py   # Authentication, validation, and response utilities
-└── frontend/               # Vue.js web application
-    ├── src/               # Source code
-    ├── components/        # Vue components
-    └── services/          # API services
-```
-
-## New Features in Version 2.0
-
-### Centralized Configuration Module
-- **Single source of truth** for all environment variables
-- **Automatic validation** of critical configuration parameters
-- **Enhanced security** with consistent JWT and authentication handling
-- **Improved maintainability** with reduced code duplication
-
-### Enhanced Security and Validation
-- **Input sanitization** across all user inputs
-- **Password strength validation** with configurable requirements
-- **User activity logging** for security monitoring
-- **Consistent error handling** and response formatting
-
-### Improved Code Architecture
-- **Shared utility functions** across all Lambda functions
-- **Centralized database access** with connection pooling
-- **Consistent CORS headers** and response formatting
-- **Enhanced error reporting** and debugging capabilities
-
-## Deployment
-
-For complete deployment instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
-
-For API documentation, see [api.yaml](api.yaml).
-
 ## Dependencies
 
-The system requires the following Python packages (see `requirements.txt`):
+The system uses Lambda Layers for optimized dependency management:
 
+### Layer 1 Dependencies
 ```
-boto3>=1.26.0           # AWS SDK
-PyJWT>=2.6.0            # JWT token handling  
-sentence-transformers>=2.2.2  # AI embeddings
-numpy>=1.24.0           # Numerical computations
-bcrypt>=4.0.0           # Password hashing
-requests>=2.28.0        # HTTP requests
+PyJWT==2.8.0
+bcrypt==4.1.2
+onnxruntime
+tokenizers
 ```
 
-**Note**: When deploying to AWS Lambda, ensure all dependencies are included in your deployment package or available as Lambda layers.
+### Layer 2 Dependencies
+```
+numpy<1.27.0
+```
 
-## Support
+### Application Dependencies (requirements.txt)
+```
+PyJWT==2.8.0
+bcrypt==4.1.2
+numpy<1.27.0
+onnxruntime
+tokenizers
+```
+## Testing
+All the endopoints are tested on AWS lambda using JSON files in the `tests` directory. Each test file corresponds to a specific endpoint and includes sample requests and expected responses.
 
-This system is designed for educational purposes as part of a Cloud Computing course. For issues or questions, refer to the documentation files in the `doc` directory.
+They are also tested using `curl` commands for remote testing. For example:
+
+```bash
+curl -X POST http://localhost:3000/auth/login -H "Content-Type: application/json" -d '{"email": "test@example.com", "password": "password"}'
+curl -X POST http://localhost:3000/search -H "Content-Type: application/json" -d '{"query": "An action movie with a female superhero"}'
+curl -X GET http://localhost:3000/user-data/favorites -H "Authorization: Bearer <token>"
+```
+
+## License
+
+MIT License

@@ -78,7 +78,7 @@ def handle_add_favorite(event):
     
     except Exception as e:
         print(f"Add favorite error: {str(e)}")
-        return build_response(500, {'error': 'Error adding favorite'})
+        return build_response(500, {'error': 'Error adding favorite '+ str(e)})
 
 def handle_remove_favorite(event):
     """
@@ -91,7 +91,7 @@ def handle_remove_favorite(event):
             return build_response(401, {'error': 'Authentication required'})
         
         # Extract movie ID from path
-        path = event.get('path', '')
+        path = event.get('rawPath', '')
         path_parts = path.split('/')
         movie_id = path_parts[-1]
         
@@ -127,7 +127,7 @@ def handle_toggle_favorite(event):
         if not user:
             return build_response(401, {'error': 'Authentication required'})
         
-        path = event.get('path', '')
+        path = event.get('rawPath', '')
         movie_id = path.split('/')[-1]
         if not movie_id:
             return build_response(400, {'error': 'Movie ID is required'})
@@ -163,7 +163,7 @@ def handle_remove_review(event):
             return build_response(401, {'error': 'Authentication required'})
         
         # Extract movie ID from path
-        path = event.get('path', '')
+        path = event.get('rawPath', '')
         path_parts = path.split('/')
         movie_id = path_parts[-1]
         
@@ -200,7 +200,7 @@ def handle_toggle_reviewed(event):
             return build_response(401, {'error': 'Authentication required'})
         
         # Extract movie_id from path
-        path = event.get('path', '')
+        path = event.get('rawPath', '')
         movie_id = path.split('/')[-1]
         if not movie_id:
             return build_response(400, {'error': 'Movie ID is required'})

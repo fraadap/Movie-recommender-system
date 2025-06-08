@@ -1,20 +1,13 @@
-# Movie Recommender System - AWS Deployment Guide v2.0
+# Movie Recommender System - AWS Deployment Guide
 
-This guide provides step-by-step instructions for deploying the Movie Recommender System v2.0 to AWS. The system features **centralized configuration management** and enhanced security, consisting of Lambda functions, DynamoDB tables, S3 storage, and API Gateway endpoints.
+This guide provides step-by-step instructions for deploying the Movie Recommender System to AWS. The system features a **single Lambda function architecture** with centralized routing, ONNX optimization, and Lambda layers for dependency management.
 
-## What's New in v2.0
-
-### Centralized Configuration Management
-- **Single Config module** (`utils/config.py`) manages all environment variables
-- **Automatic validation** of critical configuration parameters
-- **Enhanced security** with consistent JWT and authentication handling
-- **Simplified deployment** with reduced configuration complexity
-
-### Enhanced Architecture
-- **Shared utility functions** across all Lambda functions
-- **Improved error handling** and response consistency
-- **Better security** with input sanitization and activity logging
-- **Simplified maintenance** with centralized code patterns
+### Enhanced Features
+- **ONNX Models**: Pre-trained models converted to ONNX format for optimal performance
+- **Embedding Storage**: Movie embeddings stored in .npz format in S3
+- **Lambda Layers**: Two-layer dependency structure for efficient package management
+- **Centralized Configuration**: Single config module for all environment variables
+- **Improved Error Handling**: Consistent error responses across all endpoints
 
 ## Prerequisites
 
@@ -25,9 +18,9 @@ Before starting the deployment, ensure you have:
 - **pip** for Python package management
 - **AWS Account** with sufficient permissions for:
   - DynamoDB (create tables, read/write operations)
-  - Lambda (create functions, manage execution roles)
+  - Lambda (create functions, manage execution roles, manage layers)
   - S3 (create buckets, upload/download objects)
-  - API Gateway (create REST APIs, configure integrations)
+  - HTTP API Gateway (create APIs, configure integrations)
   - IAM (create and assign roles)
   - CloudWatch (access logs and metrics)
 
@@ -41,14 +34,41 @@ Your AWS credentials should have the following permissions:
 - `iam:CreateRole`, `iam:AttachRolePolicy`, `iam:PassRole`
 - `logs:*` (for CloudWatch)
 
+## Architecture Overview
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│                 │    │                  │    │                 │
+│  HTTP API       │    │  Single Lambda   │    │  DynamoDB       │
+│  Gateway        │────▶│  Function        │────▶│  Tables         │
+│                 │    │  (lambda_handler)│    │                 │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │
+                                ▼
+                       ┌─────────────────┐
+                       │                 │
+                       │  Lambda Layers  │
+                       │  (Dependencies) │
+                       │                 │
+                       └─────────────────┘
+                                │
+                                ▼
+                       ┌─────────────────┐
+                       │                 │
+                       │  S3 Bucket      │
+                       │  (ONNX Models & │
+                       │   Embeddings)   │
+                       └─────────────────┘
+```
+
 ## Step 1: Set Up AWS Infrastructure
 
-### 1.1 Create S3 Bucket for Embeddings
+### 1.1 Create S3 Bucket for Embeddings and Models
 
-Create an S3 bucket to store movie embeddings:
+Create an S3 bucket to store ONNX models and movie embeddings:
 
 ```bash
-# Create bucket for embeddings (replace with your unique bucket name)
+# Create bucket for embeddings and models (replace with your unique bucket name)
 aws s3 mb s3://your-movie-embeddings-bucket --region us-east-1
 
 # Verify bucket creation
@@ -78,9 +98,9 @@ This creates the following tables:
 - **MovieRecommender_Preferences**: User preferences and settings
 - **MovieRecommender_Activity**: User activity tracking
 
-### 1.3 Create IAM Role for Lambda Functions
+### 1.3 Create IAM Role for Lambda Function
 
-Create an IAM role with necessary permissions:
+Create an IAM role with necessary permissions for the single Lambda function:
 
 ```bash
 # Create role policy document
@@ -121,6 +141,346 @@ cat > lambda-permissions-policy.json << EOF
         "dynamodb:PutItem",
         "dynamodb:Query",
         "dynamodb:Scan",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/Movies",
+        "arn:aws:dynamodb:*:*:table/Reviews",
+        "arn:aws:dynamodb:*:*:table/MovieRecommender_Users",
+        "arn:aws:dynamodb:*:*:table/MovieRecommender_Favorites",
+        "arn:aws:dynamodb:*:*:table/MovieRecommender_Activity"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::movieembeddings/*"
+    }
+  ]
+}
+EOF
+
+# Create and attach the custom policy
+aws iam create-policy \
+  --policy-name MovieRecommenderLambdaPolicy \
+  --policy-document file://lambda-permissions-policy.json
+
+aws iam attach-role-policy \
+  --role-name MovieRecommenderLambdaRole \
+  --policy-arn arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/MovieRecommenderLambdaPolicy
+```
+
+## Step 2: Create Lambda Layers
+
+### 2.1 Create Lambda Layer 1 (Core Dependencies)
+
+```bash
+# Create directory for layer 1
+mkdir lambda-layer-1
+cd lambda-layer-1
+mkdir python
+
+# Install core dependencies
+pip install PyJWT bcrypt onnxruntime tokenizers -t python/
+
+# Create layer zip
+zip -r lambda-layer-1.zip python/
+
+# Create the layer
+aws lambda publish-layer-version \
+  --layer-name MovieRecommenderLayer1 \
+  --description "Core dependencies: PyJWT, bcrypt, onnxruntime, tokenizers" \
+  --zip-file fileb://lambda-layer-1.zip \
+  --compatible-runtimes python3.9
+
+cd ..
+```
+
+### 2.2 Create Lambda Layer 2 (NumPy)
+
+```bash
+# Create directory for layer 2
+mkdir lambda-layer-2
+cd lambda-layer-2
+mkdir python
+
+# Install numpy with version constraint
+pip install "numpy<1.27.0" -t python/
+
+# Create layer zip
+zip -r lambda-layer-2.zip python/
+
+# Create the layer
+aws lambda publish-layer-version \
+  --layer-name MovieRecommenderLayer2 \
+  --description "NumPy dependencies with version constraint" \
+  --zip-file fileb://lambda-layer-2.zip \
+  --compatible-runtimes python3.9
+
+cd ..
+```
+
+## Step 3: Environment Variables Configuration
+
+### 3.1 Configure Environment Variables
+
+Set up the required environment variables for the Lambda function. The centralized configuration in `utils/config.py` manages all settings:
+
+**Core Configuration:**
+```bash
+# JWT Configuration
+export JWT_SECRET_KEY=your-super-secret-jwt-key-change-this-in-production
+export JWT_ACCESS_TOKEN_EXPIRES=3600  # 1 hour
+export JWT_REFRESH_TOKEN_EXPIRES=2592000  # 30 days
+
+# DynamoDB Configuration
+export DYNAMODB_REGION=us-east-1
+export MOVIES_TABLE=Movies
+export REVIEWS_TABLE=Reviews
+export USERS_TABLE=MovieRecommender_Users
+export FAVORITES_TABLE=MovieRecommender_Favorites
+export ACTIVITY_TABLE=MovieRecommender_Activity
+
+# S3 Configuration
+export S3_BUCKET_NAME=movieembeddings
+export S3_REGION=us-east-1
+export ONNX_MODEL_KEY=sentence_transformer.onnx
+export EMBEDDINGS_KEY=movie_embeddings.npz
+
+# API Configuration
+export DEFAULT_TOP_K=10
+export MAX_TOP_K=100
+```
+
+### Configuration Benefits
+
+The centralized configuration provides:
+- **Single source of truth** for all environment variables
+- **Automatic validation** of critical parameters  
+- **Default values** for optional settings
+- **Enhanced security** with consistent patterns
+- **Simplified maintenance** across the single function
+
+## Step 4: Deploy Single Lambda Function
+
+### 4.1 Prepare Lambda Deployment Package
+
+```bash
+# Create deployment directory
+mkdir lambda_deployment
+cd lambda_deployment
+
+# Copy the main handler and supporting modules
+copy ..\lambda_handler.py .
+copy ..\lambda_functions\*.py .
+copy ..\utils\*.py .
+
+# Create deployment package (layers handle dependencies)
+zip -r movie_recommender_lambda.zip *.py
+
+# Deploy the Lambda function
+aws lambda create-function \
+  --function-name MovieRecommenderFunction \
+  --runtime python3.9 \
+  --role arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):role/MovieRecommenderLambdaRole \
+  --handler lambda_handler.lambda_handler \
+  --zip-file fileb://movie_recommender_lambda.zip \
+  --timeout 30 \
+  --memory-size 512 \
+  --layers \
+    arn:aws:lambda:us-east-1:$(aws sts get-caller-identity --query Account --output text):layer:MovieRecommenderLayer1:1 \
+    arn:aws:lambda:us-east-1:$(aws sts get-caller-identity --query Account --output text):layer:MovieRecommenderLayer2:1
+```
+
+### 4.2 Configure Environment Variables
+
+```bash
+# Set environment variables for the Lambda function
+aws lambda update-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --environment Variables='{
+    "JWT_SECRET_KEY":"your-super-secret-jwt-key-change-this-in-production",
+    "JWT_ACCESS_TOKEN_EXPIRES":"3600",
+    "JWT_REFRESH_TOKEN_EXPIRES":"2592000",
+    "DYNAMODB_REGION":"us-east-1",
+    "MOVIES_TABLE":"Movies",
+    "REVIEWS_TABLE":"Reviews", 
+    "USERS_TABLE":"MovieRecommender_Users",
+    "FAVORITES_TABLE":"MovieRecommender_Favorites",
+    "ACTIVITY_TABLE":"MovieRecommender_Activity",
+    "S3_BUCKET_NAME":"movieembeddings",
+    "S3_REGION":"us-east-1",
+    "ONNX_MODEL_KEY":"sentence_transformer.onnx",
+    "EMBEDDINGS_KEY":"movie_embeddings.npz",
+    "DEFAULT_TOP_K":"10",
+    "MAX_TOP_K":"100"
+  }'
+```
+
+## Step 5: Convert Models to ONNX and Upload to S3
+
+### 5.1 Convert Sentence Transformer to ONNX
+
+Use the provided conversion script:
+
+```bash
+# Run the ONNX conversion script
+python initial_setup/convert_to_onnx.py
+```
+
+This will:
+- Download the sentence-transformer model
+- Convert it to ONNX format for optimized inference
+- Upload the ONNX model to S3
+
+### 5.2 Generate and Upload Embeddings
+
+```bash
+# Generate movie embeddings in .npz format
+python initial_setup/generate_embeddings.py
+
+# The script will automatically:
+# - Generate embeddings for all movies
+# - Save as .npz format (384 embeddings + 1 movie_id column)
+# - Upload to S3 bucket
+```
+
+## Step 6: Set Up HTTP API Gateway
+
+### 6.1 Create HTTP API
+
+```bash
+# Create HTTP API Gateway (not REST API)
+aws apigatewayv2 create-api \
+  --name MovieRecommenderAPI \
+  --protocol-type HTTP \
+  --description "Movie Recommender API with single Lambda function"
+```
+
+### 6.2 Create Lambda Integration
+
+```bash
+# Get the API ID from the previous command output
+API_ID=your-api-id-here
+
+# Create integration with the Lambda function
+aws apigatewayv2 create-integration \
+  --api-id $API_ID \
+  --integration-type AWS_PROXY \
+  --integration-uri arn:aws:lambda:us-east-1:$(aws sts get-caller-identity --query Account --output text):function:MovieRecommenderFunction \
+  --payload-format-version 2.0
+```
+
+### 6.3 Create Routes
+
+Since we have a single Lambda function with centralized routing, we create a catch-all route:
+
+```bash
+# Get integration ID from previous command
+INTEGRATION_ID=your-integration-id-here
+
+# Create catch-all route for all endpoints
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "ANY /{proxy+}" \
+  --target integrations/$INTEGRATION_ID
+
+# Create specific routes (optional, for better documentation)
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /auth/register" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /auth/login" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /auth/refresh" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /search" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /content" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /collaborative" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /similar" \
+  --target integrations/$INTEGRATION_ID
+
+# User data routes
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "GET /favorites" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /favorites" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "GET /favorites/{movie_id}" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "DELETE /favorites/{movie_id}" \
+  --target integrations/$INTEGRATION_ID
+
+# Review routes
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "GET /reviews" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "POST /reviews" \
+  --target integrations/$INTEGRATION_ID
+
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "DELETE /reviews/{review_id}" \
+  --target integrations/$INTEGRATION_ID
+
+# Activity route
+aws apigatewayv2 create-route \
+  --api-id $API_ID \
+  --route-key "GET /activity" \
+  --target integrations/$INTEGRATION_ID
+```
+
+### 6.4 Create Deployment Stage
+
+```bash
+# Create default stage
+aws apigatewayv2 create-stage \
+  --api-id $API_ID \
+  --stage-name prod \
+  --description "Production stage for Movie Recommender API"
+
+# Get the API endpoint URL
+aws apigatewayv2 get-api --api-id $API_ID --query 'ApiEndpoint'
+```
         "dynamodb:UpdateItem",
         "dynamodb:DeleteItem"
       ],
@@ -199,7 +559,7 @@ This script will:
 - Save embeddings to both local file and S3 bucket
 - Create a 23MB `embeddings.jsonl` file
 
-## Step 2.5: Configure Centralized Settings (NEW in v2.0)
+## Step 2.5: Configure Centralized Settings (NEW in)
 
 The system now uses a centralized configuration module that simplifies deployment and maintenance. All environment variables are managed through the `Config` class in `utils/config.py`.
 
@@ -241,7 +601,7 @@ The centralized configuration provides:
 
 ### 3.1 Install Dependencies and Prepare Deployment Packages
 
-**Note:** In v2.0, the deployment is simplified with centralized configuration and shared utilities.
+**Note:** In, the deployment is simplified with centralized configuration and shared utilities.
 
 ```bash
 # Create deployment directories
@@ -730,58 +1090,177 @@ aws cloudwatch put-metric-alarm ^
   --namespace AWS/DynamoDB ^
   --statistic Sum ^
   --period 300 ^
-  --threshold 0 ^
-  --comparison-operator GreaterThanThreshold ^
-  --evaluation-periods 1
-```
+  ## Step 7: Grant API Gateway Permissions
 
-#### Custom Monitoring Dashboard:
+Grant API Gateway permission to invoke the Lambda function:
+
 ```bash
-# Create CloudWatch dashboard
-aws cloudwatch put-dashboard ^
-  --dashboard-name "MovieRecommenderDashboard" ^
-  --dashboard-body file://dashboard-config.json
+# Grant API Gateway permission to invoke Lambda
+aws lambda add-permission \
+  --function-name MovieRecommenderFunction \
+  --statement-id apigateway-invoke \
+  --action lambda:InvokeFunction \
+  --principal apigateway.amazonaws.com \
+  --source-arn "arn:aws:execute-api:us-east-1:$(aws sts get-caller-identity --query Account --output text):$API_ID/*/*"
 ```
 
-### 6.4 Cost Optimization
+## Step 8: Test the Deployment
+
+### 8.1 API Endpoint Testing
+
+```bash
+# Get the API endpoint URL
+API_ENDPOINT=$(aws apigatewayv2 get-api --api-id $API_ID --query 'ApiEndpoint' --output text)
+
+# Test user registration
+curl -X POST "$API_ENDPOINT/prod/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "testuser",
+    "email": "test@example.com", 
+    "password": "securePassword123"
+  }'
+
+# Test semantic search
+curl -X POST "$API_ENDPOINT/prod/search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "action movies with explosions",
+    "top_k": 5
+  }'
+```
+
+### 8.2 Using Test Scripts
+
+The project includes comprehensive test scripts:
+
+```bash
+# Run all endpoint tests
+cd test
+python lambda_endpoint_tests_v3.py
+
+# Run specific curl tests
+cd curl
+run_all_tests.bat
+```
+
+## Step 9: Monitoring and Optimization
+
+### 9.1 CloudWatch Monitoring
+
+Set up monitoring for the single Lambda function:
+
+```bash
+# Create alarm for Lambda errors
+aws cloudwatch put-metric-alarm \
+  --alarm-name "MovieRecommenderFunction-Errors" \
+  --alarm-description "Alert on Lambda function errors" \
+  --metric-name Errors \
+  --namespace AWS/Lambda \
+  --statistic Sum \
+  --period 300 \
+  --threshold 5 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=FunctionName,Value=MovieRecommenderFunction \
+  --evaluation-periods 2
+
+# Create alarm for Lambda duration
+aws cloudwatch put-metric-alarm \
+  --alarm-name "MovieRecommenderFunction-Duration" \
+  --alarm-description "Alert on high Lambda duration" \
+  --metric-name Duration \
+  --namespace AWS/Lambda \
+  --statistic Average \
+  --period 300 \
+  --threshold 25000 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=FunctionName,Value=MovieRecommenderFunction \
+  --evaluation-periods 2
+
+# Create alarm for API Gateway latency
+aws cloudwatch put-metric-alarm \
+  --alarm-name "API-Gateway-Latency" \
+  --alarm-description "Alert on high API latency" \
+  --metric-name Latency \
+  --namespace AWS/ApiGateway \
+  --statistic Average \
+  --period 300 \
+  --threshold 5000 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2
+```
+
+### 9.2 Performance Optimization
+
+#### Lambda Function Optimization:
+- **Memory**: Start with 512MB and adjust based on performance metrics
+- **Timeout**: 30 seconds should be sufficient for most operations
+- **Concurrency**: Monitor and set reserved concurrency if needed
+
+#### Layer Management:
+```bash
+# Update Layer 1 when dependencies change
+aws lambda publish-layer-version \
+  --layer-name MovieRecommenderLayer1 \
+  --description "Updated core dependencies" \
+  --zip-file fileb://lambda-layer-1.zip \
+  --compatible-runtimes python3.9
+
+# Update Lambda function to use new layer version
+aws lambda update-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --layers \
+    arn:aws:lambda:us-east-1:$(aws sts get-caller-identity --query Account --output text):layer:MovieRecommenderLayer1:2 \
+    arn:aws:lambda:us-east-1:$(aws sts get-caller-identity --query Account --output text):layer:MovieRecommenderLayer2:1
+```
+
+### 9.3 Cost Optimization
 
 #### Cost Monitoring:
 - **Lambda**: Monitor invocation count and duration
-- **DynamoDB**: Track read/write capacity utilization  
+- **DynamoDB**: Track read/write capacity utilization
 - **S3**: Monitor storage and data transfer costs
 - **API Gateway**: Track API requests and data transfer
 
 #### Optimization Strategies:
 1. **Use DynamoDB On-Demand** for unpredictable traffic
-2. **Implement caching** in Lambda functions for frequently accessed data
+2. **Enable Lambda function caching** for ONNX models
 3. **Optimize Lambda memory allocation** based on performance testing
 4. **Use S3 Intelligent Tiering** for embeddings storage
 5. **Monitor and right-size** resources regularly
 
-### 6.5 Backup and Disaster Recovery
+### 9.4 Backup and Disaster Recovery
 
 ```bash
 # Enable DynamoDB point-in-time recovery for all tables
-aws dynamodb update-continuous-backups ^
-  --table-name Movies ^
+aws dynamodb update-continuous-backups \
+  --table-name Movies \
   --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
 
-aws dynamodb update-continuous-backups ^
-  --table-name Reviews ^
+aws dynamodb update-continuous-backups \
+  --table-name Reviews \
   --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
 
-aws dynamodb update-continuous-backups ^
-  --table-name MovieRecommender_Users ^
+aws dynamodb update-continuous-backups \
+  --table-name MovieRecommender_Users \
+  --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
+
+aws dynamodb update-continuous-backups \
+  --table-name MovieRecommender_Favorites \
+  --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
+
+aws dynamodb update-continuous-backups \
+  --table-name MovieRecommender_Activity \
   --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
 
 # Enable S3 versioning for embeddings bucket
-aws s3api put-bucket-versioning ^
-  --bucket your-movie-embeddings-bucket ^
+aws s3api put-bucket-versioning \
+  --bucket movieembeddings \
   --versioning-configuration Status=Enabled
 
 # Create cross-region backup (optional)
-aws dynamodb create-backup ^
-  --table-name Movies ^
+aws dynamodb create-backup \
+  --table-name Movies \
   --backup-name Movies-Backup-$(date +%Y%m%d)
 ```
 
@@ -794,8 +1273,207 @@ aws dynamodb create-backup ^
 **Solutions:**
 ```bash
 # Increase Lambda timeout
-aws lambda update-function-configuration ^
-  --function-name MovieSearchFunction ^
+aws lambda update-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --timeout 60
+
+# Check CloudWatch logs for performance bottlenecks
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/MovieRecommenderFunction \
+  --start-time $(date -d '1 hour ago' +%s)000
+```
+
+#### 2. ONNX Model Loading Issues
+**Symptoms:** Semantic search fails with model loading errors
+**Solutions:**
+```bash
+# Verify ONNX model exists in S3
+aws s3 ls s3://movieembeddings/sentence_transformer.onnx
+
+# Check Lambda logs for specific error messages
+aws logs describe-log-groups \
+  --log-group-name-prefix /aws/lambda/MovieRecommenderFunction
+
+# Increase Lambda memory if model loading fails
+aws lambda update-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --memory-size 1024
+```
+
+#### 3. Layer Dependency Issues
+**Symptoms:** Import errors or missing modules
+**Solutions:**
+```bash
+# Verify layers are attached to function
+aws lambda get-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --query 'Layers'
+
+# Check layer contents
+aws lambda get-layer-version \
+  --layer-name MovieRecommenderLayer1 \
+  --version-number 1
+
+# Recreate layers if necessary
+rm -rf lambda-layer-1
+mkdir -p lambda-layer-1/python
+pip install PyJWT bcrypt onnxruntime tokenizers -t lambda-layer-1/python/
+cd lambda-layer-1 && zip -r ../lambda-layer-1.zip python/
+```
+
+#### 4. API Gateway Integration Issues
+**Symptoms:** API returns 502 Bad Gateway or integration timeouts
+**Solutions:**
+```bash
+# Check API Gateway integration configuration
+aws apigatewayv2 get-integration \
+  --api-id $API_ID \
+  --integration-id $INTEGRATION_ID
+
+# Verify Lambda function permissions
+aws lambda get-policy \
+  --function-name MovieRecommenderFunction
+
+# Test Lambda function directly
+aws lambda invoke \
+  --function-name MovieRecommenderFunction \
+  --payload '{"httpMethod": "GET", "path": "/health"}' \
+  response.json
+```
+
+#### 5. DynamoDB Connection Issues
+**Symptoms:** Database connection errors or timeouts
+**Solutions:**
+```bash
+# Verify DynamoDB tables exist
+aws dynamodb list-tables
+
+# Check table status
+aws dynamodb describe-table \
+  --table-name Movies \
+  --query 'Table.TableStatus'
+
+# Test DynamoDB connectivity
+aws dynamodb scan \
+  --table-name Movies \
+  --max-items 1
+```
+
+### Performance Troubleshooting
+
+#### Lambda Cold Starts
+- **Monitor**: CloudWatch Duration metrics
+- **Solution**: Consider provisioned concurrency for high-traffic endpoints
+- **Optimization**: Keep function warm with scheduled invocations
+
+#### ONNX Model Performance
+- **Monitor**: Model loading time in logs
+- **Solution**: Increase Lambda memory allocation
+- **Optimization**: Cache models in /tmp directory
+
+#### DynamoDB Performance
+- **Monitor**: CloudWatch ConsumedReadCapacityUnits/ConsumedWriteCapacityUnits
+- **Solution**: Switch to On-Demand billing or increase provisioned capacity
+- **Optimization**: Use DynamoDB Accelerator (DAX) for caching
+
+### Log Analysis
+
+```bash
+# View recent Lambda logs
+aws logs tail /aws/lambda/MovieRecommenderFunction --follow
+
+# Search for specific errors
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/MovieRecommenderFunction \
+  --filter-pattern "ERROR" \
+  --start-time $(date -d '1 hour ago' +%s)000
+
+# Export logs for analysis
+aws logs create-export-task \
+  --log-group-name /aws/lambda/MovieRecommenderFunction \
+  --from $(date -d '1 day ago' +%s)000 \
+  --to $(date +%s)000 \
+  --destination movierecommender-logs
+```
+
+## Maintenance and Updates
+
+### Regular Maintenance Tasks
+
+1. **Monitor Performance Metrics**
+   - Lambda duration and error rates
+   - DynamoDB read/write capacity utilization
+   - API Gateway request rates and latency
+
+2. **Update Dependencies**
+   - Recreate Lambda layers when dependencies need updates
+   - Update ONNX models if sentence transformer versions change
+   - Keep Python runtime updated
+
+3. **Security Updates**
+   - Rotate JWT secret keys periodically
+   - Review IAM policies and permissions
+   - Update Lambda function security groups if used
+
+4. **Data Maintenance**
+   - Monitor DynamoDB storage usage
+   - Clean up old user activity records if needed
+   - Update movie embeddings when dataset changes
+
+### Updating the System
+
+#### Function Code Updates:
+```bash
+# Update Lambda function code
+zip -r movie_recommender_lambda_v2.zip *.py
+aws lambda update-function-code \
+  --function-name MovieRecommenderFunction \
+  --zip-file fileb://movie_recommender_lambda_v2.zip
+```
+
+#### Environment Variable Updates:
+```bash
+# Update environment variables
+aws lambda update-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --environment Variables='{
+    "JWT_SECRET_KEY":"new-secret-key",
+    "S3_BUCKET_NAME":"movieembeddings",
+    "ONNX_MODEL_KEY":"sentence_transformer_v2.onnx"
+  }'
+```
+
+#### Layer Updates:
+```bash
+# Create new layer version
+aws lambda publish-layer-version \
+  --layer-name MovieRecommenderLayer1 \
+  --description "Updated dependencies version 2" \
+  --zip-file fileb://lambda-layer-1-v2.zip \
+  --compatible-runtimes python3.9
+
+# Update function to use new layer
+aws lambda update-function-configuration \
+  --function-name MovieRecommenderFunction \
+  --layers \
+    arn:aws:lambda:us-east-1:ACCOUNT_ID:layer:MovieRecommenderLayer1:2 \
+    arn:aws:lambda:us-east-1:ACCOUNT_ID:layer:MovieRecommenderLayer2:1
+```
+
+## Conclusion
+
+The Movie Recommender System provides a robust, scalable, and cost-effective serverless architecture with single Lambda function deployment, ONNX optimization, and Lambda layers for dependency management. The system is designed for:
+
+- **High Performance**: ONNX models and efficient embedding storage
+- **Cost Efficiency**: Single function architecture and layer optimization
+- **Easy Maintenance**: Centralized configuration and simplified deployment
+- **Scalability**: Serverless architecture with automatic scaling
+
+For support and additional information, refer to:
+- [README.md](README.md) - Complete system overview
+- [api.yaml](api.yaml) - API specification
+- [CHANGELOG_v2.0.md](CHANGELOG_v2.0.md) - Version 2.0 changes
+- [Test scripts](../test/) - Comprehensive testing suite
   --timeout 60
 
 # Increase memory allocation (improves CPU performance)

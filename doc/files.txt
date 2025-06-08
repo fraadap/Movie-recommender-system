@@ -1,54 +1,43 @@
-Project Overview: Movie Recommender System v2.0
+Project Overview: Movie Recommender System
 ===============================================
 
 This is a complete serverless movie recommendation system built on AWS, featuring semantic search, 
 collaborative filtering, user management, and a modern Vue.js frontend. **Version 2.0** introduces 
-centralized configuration management and enhanced security features.
+a single Lambda function architecture with ONNX optimization and Lambda layers for dependency management.
 
 BACKEND STRUCTURE:
 ===================
 
-lambda_functions/handler.py:
-- **NEW: Main centralized routing handler** for all API endpoints
-- Imports and coordinates all Lambda function modules
-- Provides unified entry point for deployment
-- Enhanced error handling and logging
+lambda_handler.py:
+- **NEW: Single Lambda function entry point** with centralized routing
+- Unified handler for all API endpoints using HTTP API Gateway
+- Routes requests to appropriate function modules based on HTTP path
+- Enhanced error handling and consistent response formatting
+- Integrates all functionality: auth, recommendations, user data
+- Supports all endpoints: /auth/*, /search, /content, /collaborative, /similar, /favorites, /reviews, /activity
 
 lambda_functions/MovieAuthFunction.py:
-- Handles user authentication and registration
-- **UPDATED: Uses centralized Config module** for environment variables
+- Handles user authentication and registration logic
 - JWT token generation and validation with enhanced security
-- Password strength validation and security improvements
-- User account management endpoints (/auth/login, /auth/register, /auth/refresh)
+- Password hashing using bcrypt
+- User account management functions
+- Functions: register_user(), login_user(), refresh_token(), validate_token()
 
 lambda_functions/MovieUserDataFunction.py:
-- Manages user behavioral data and preferences  
-- **UPDATED: Integrated with shared configuration and utilities**
-- Enhanced input sanitization and user activity logging
-- Favorites list management with improved validation
-- User reviews and ratings with enhanced security
-- Activity tracking and user account info
-- Endpoints: /user-data/favorites, /user-data/reviews, /user/activity, /user/account
-
-lambda_functions/search_lambda_router.py:
-- **UPDATED: Main router for search and recommendation endpoints**
-- Handles API Gateway integration and request routing
-- **NEW: Uses centralized Config for all environment variables**
-- Enhanced caching of ML models and database connections
-- Improved error handling and resource management
-- Coordinates between search algorithms and data sources
-- Endpoints: /search, /content, /collaborative, /similar
+- Manages user behavioral data and preferences logic
+- Favorites list management and user reviews
+- User activity tracking and account management
+- Functions: get_favorites(), add_favorite(), remove_favorite(), get_reviews(), add_review(), etc.
 
 lambda_functions/RecommendationFunctions.py:
-- Core recommendation algorithms implementation
-- **UPDATED: Integrated with shared configuration module**
-- Semantic search using sentence transformers embeddings
-- Content-based filtering using movie similarity
-- Collaborative filtering based on user ratings
-- Machine learning logic and similarity calculations
+- Core recommendation algorithms implementation with ONNX optimization
+- Semantic search using ONNX-optimized sentence transformer models
+- Content-based filtering using pre-computed movie embeddings
+- Collaborative filtering based on user ratings and preferences
+- Functions: semantic_search(), content_based_recommendations(), collaborative_filtering(), similar_movies()
 
-SHARED UTILITIES (NEW IN v2.0):
-==============================
+SHARED UTILITIES:
+================
 
 utils/config.py:
 - **NEW: Centralized configuration management module**
@@ -59,93 +48,82 @@ utils/config.py:
 - CORS headers and feature flag management
 - Enhanced security and maintainability
 
-utils/utils_function.py:
-- **COMPLETELY REWRITTEN: Enhanced shared utility functions**
-- JWT token generation and validation with Config integration
-- Password hashing, validation, and strength checking
-- User authentication and session management
-- Input sanitization and security utilities
-- User activity logging and audit trails
-- Consistent response formatting and error handling
-- CORS header management
+utils/config.py:
+- **NEW: Centralized configuration management** for all environment variables
+- Single source of truth for JWT, DynamoDB, S3, and API settings
+- Automatic validation of critical configuration parameters
+- Default values and environment-specific configurations
+- Enhanced security with consistent configuration patterns
 
 utils/database.py:
-- **UPDATED: Centralized database connection management**
-- Integration with Config module for endpoint configuration
-- Enhanced connection pooling and resource management
+- **UPDATED: Enhanced database connection management**
+- Integration with centralized Config module for settings
+- Improved connection pooling and resource management
 - Health checking and connection validation
 - Consistent table access patterns across all functions
 
-SETUP AND CONFIGURATION:
-========================
+utils/utils_function.py:
+- **ENHANCED: Shared utility functions** for all Lambda functions
+- JWT token generation and validation with improved security
+- Password hashing and validation using bcrypt
+- User authentication and session management
+- Input sanitization and validation utilities
+- Consistent response formatting and error handling
+- CORS header management for API Gateway
+
+DEPLOYMENT AND INFRASTRUCTURE:
+=============================
+
+requirements.txt:
+- **UPDATED: Optimized dependencies** for Lambda layers architecture
+- Core dependencies: PyJWT, bcrypt, onnxruntime, tokenizers
+- NumPy with version constraint (numpy<1.27.0)
+- Separated into two Lambda layers for better performance
 
 initial_setup/create_table.py:
-- Creates all 7 DynamoDB tables required by the system
-- Movies, Reviews, MovieRecommender_Users, MovieRecommender_Favorites
-- MovieRecommender_Watched, MovieRecommender_Preferences, MovieRecommender_Activity
-- **ENHANCED: Better error handling and table validation**
-- Configures indexes and table settings
+- Creates 5 core DynamoDB tables required by the system
+- Movies, Reviews, MovieRecommender_Users, MovieRecommender_Favorites, MovieRecommender_Activity
+- **ENHANCED: Improved table configuration and validation**
+- Proper indexes and capacity settings
 
 initial_setup/data_processor.py:
 - Processes Kaggle movie dataset (movies_metadata.csv, credits.csv, ratings.csv)
 - **UPDATED: Enhanced data validation and processing**
 - Cleans and transforms data for DynamoDB storage
 - Handles ~45,000 movies and ~26M ratings
-- Extracts cast, crew, and metadata information
 - Improved error handling and data quality checks
 
 initial_setup/generate_embeddings.py:
-- **UPDATED: Integration with centralized configuration**
-- Generates semantic embeddings using SentenceTransformers
-- Uploads embeddings to S3 with improved error handling
-- Enhanced processing efficiency and batch operations
+- **UPDATED: ONNX-optimized embedding generation**
+- Generates movie embeddings using sentence transformers
+- Saves embeddings in .npz format (384 embeddings + 1 movie_id column)
+- Uploads to S3 bucket "movieembeddings" for efficient access
+- Integration with centralized configuration
 
-initial_setup/config.py:
-- **UPDATED: Works with new centralized Config module**
-- Local configuration settings for development
-- Integration with AWS services configuration
-
-KEY IMPROVEMENTS IN v2.0:
-=========================
-
-1. **Centralized Configuration Management**
-   - Single Config class manages all environment variables
-   - Automatic validation and default value handling
-   - Enhanced security and maintainability
-   - Consistent configuration across all Lambda functions
-
-2. **Enhanced Security Features**
-   - Input sanitization across all user inputs
-   - Password strength validation with configurable requirements
-   - User activity logging for security monitoring
-   - Enhanced JWT token handling and validation
-
-3. **Improved Code Architecture**
-   - Shared utility functions reduce code duplication
-   - Centralized database access with connection pooling
-   - Consistent error handling and response formatting
-   - Enhanced debugging and logging capabilities
-
-4. **Better Development Experience**
-   - Simplified local development setup
-   - Consistent CORS headers and API responses
-   - Improved error reporting and debugging
-   - Enhanced code maintainability and testing
-- Generates 384-dimensional embeddings for all movies
-- Uses sentence-transformers/all-MiniLM-L6-v2 model
-- Combines title, overview, genres, cast, and directors into descriptive text
-- Uploads embeddings to S3 for fast similarity search
+initial_setup/convert_to_onnx.py:
+- **NEW: ONNX model conversion** for optimized inference
+- Converts sentence transformer models to ONNX format
+- Eliminates need for heavy sentence-transformers dependency in Lambda
+- Uploads ONNX models to S3 for runtime access
 
 initial_setup/api_gateway_setup.py:
-- Automated API Gateway configuration script
-- Creates REST API with all required endpoints
-- Configures Lambda integrations and CORS
-- Sets up permissions and deploys to production stage
+- **NEW: HTTP API Gateway setup script**
+- Automated setup for HTTP API Gateway (not REST API)
+- Creates integrations and routes for single Lambda function
+- Configures CORS and authentication settings
 
-initial_setup/config.py:
-- Configuration settings for setup scripts
-- Environment variables and AWS resource names
-- Database connection parameters
+LAMBDA LAYERS ARCHITECTURE:
+==========================
+
+Layer 1 (MovieRecommenderLayer1):
+- PyJWT: JSON Web Token handling
+- bcrypt: Password hashing
+- onnxruntime: ONNX model inference
+- tokenizers: Text tokenization for embeddings
+
+Layer 2 (MovieRecommenderLayer2):
+- numpy<1.27.0: Numerical computations with version constraint
+- Required for embedding operations and similarity calculations
 
 UTILITIES:
 ==========
@@ -168,64 +146,7 @@ requirements.txt:
 - JWT handling, bcrypt for password hashing
 - AWS SDK and data processing libraries
 
-FRONTEND STRUCTURE:
-==================
 
-frontend/src/App.vue:
-- Main Vue.js application component
-- Root component that holds the entire app structure
-- Global styling and layout management
-
-frontend/src/main.js:
-- Application entry point and configuration
-- Vue app initialization with router and store
-- Global plugin and component registration
-
-frontend/src/components/:
-- Reusable UI components for the application
-- HeaderBar.vue: Navigation header with user menu
-- FooterBar.vue: Application footer with links
-- MovieCard.vue: Movie display card for lists and grids
-- MovieDetail.vue: Detailed movie information component
-- LoadingSpinner.vue: Loading state indicator
-- NotificationSystem.vue: Toast notifications and alerts
-- Sidebar.vue: Navigation sidebar with filters
-- UserDataLoader.vue: Component for loading user-specific data
-
-frontend/src/views/:
-- Main application pages and views
-- Home.vue: Homepage with search and featured movies
-- Search.vue: Search results and filtering interface
-- MovieDetail.vue: Full movie details page
-- Login.vue: User login form and authentication
-- Register.vue: User registration form
-- Profile.vue: User profile management and settings
-- Favorites.vue: User's favorite movies list
-
-frontend/src/store/:
-- Vuex state management for application data
-- index.js: Main store configuration and modules
-- modules/auth.js: Authentication state and user data
-- modules/movies.js: Movie data, search results, and recommendations
-- modules/ui.js: UI state, notifications, and loading states
-
-frontend/src/services/:
-- API integration and external service communication
-- api.js: HTTP client for backend API communication
-- syncService.js: Data synchronization between frontend and backend
-
-frontend/src/router/:
-- Vue Router configuration for single-page application
-- index.js: Route definitions, navigation guards, and lazy loading
-
-frontend/src/utils/:
-- Frontend utility functions and helpers
-- errorHandler.js: Centralized error handling and user feedback
-
-frontend/package.json:
-- Node.js dependencies and build scripts
-- Vue.js, Vuex, Vue Router, Axios for HTTP requests
-- SCSS for styling, development and build tools
 
 DOCUMENTATION:
 ==============

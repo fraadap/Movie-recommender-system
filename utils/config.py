@@ -9,6 +9,7 @@ class Config:
     Centralized configuration management for all Lambda functions
     Loads environment variables once and makes them available across the application
     """
+    _embeddings = None
     
     # JWT Configuration
     JWT_SECRET = os.getenv('JWT_SECRET')
@@ -20,9 +21,9 @@ class Config:
     ACTIVITY_TABLE = os.getenv('ACTIVITY_TABLE', 'MovieRecommender_Activity')
     REVIEWS_TABLE = os.getenv('REVIEWS_TABLE', 'Reviews')
     MOVIES_TABLE = os.getenv('MOVIES_TABLE', 'Movies')
-    # S3 Configuration for Embeddings
+      # S3 Configuration for Embeddings
     EMBEDDINGS_BUCKET = os.getenv('EMBEDDINGS_BUCKET', 'movieembeddings')
-    EMBEDDINGS_OUTPUT_FILE = os.getenv('EMBEDDINGS_OUTPUT_FILE', 'embeddings.npy')
+    EMBEDDINGS_OUTPUT_FILE = os.getenv('EMBEDDINGS_OUTPUT_FILE', 'embeddings.npz')
     
     # ML Model Configuration
     EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
@@ -53,7 +54,7 @@ class Config:
         required_vars = []
         
         # Check critical configuration
-        if not cls.JWT_SECRET or cls.JWT_SECRET == 'P1ywar3K75qD4dfGBFjsJrfbQRLixtZBZKPPYZjJFbQej9pqudua23GDICpfOVihN_2zHdU-hU1pVl57rXAu3Q':
+        if not cls.JWT_SECRET:
             required_vars.append('JWT_SECRET')
         
         # For production, embeddings bucket should be configured

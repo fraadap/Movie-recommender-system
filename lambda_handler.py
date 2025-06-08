@@ -4,6 +4,7 @@ import lambda_functions.RecommendationFunctions as rf
 from utils.config import Config
 from utils.utils_function import build_response
 
+rf.load_embeddings()
 
 def lambda_handler(event, context):
     """
@@ -11,13 +12,12 @@ def lambda_handler(event, context):
     """
     try:
         # Extract path and HTTP method
-
+        print(len(Config._embeddings))
         path = event.get("requestContext", {}).get("http", {}).get("path", "")
         http_method = event.get("requestContext", {}).get("http", {}).get("method", "")
         if not http_method:
             path = event.get('path', '')
             http_method = event.get('httpMethod', '')
-
 
         # Route request to appropriate handler
         if path.endswith('/user-data/favorites') and http_method == 'GET':

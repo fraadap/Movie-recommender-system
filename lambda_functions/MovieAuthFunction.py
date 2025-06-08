@@ -125,7 +125,7 @@ def handle_refresh(event):
     try:
         # Get Authorization header
         headers = event.get('headers', {})
-        auth_header = headers.get('Authorization', '')
+        auth_header = headers.get('authorization', '')
         
         if not auth_header.startswith('Bearer '):
             return build_response(401, {'error': 'Invalid token'})

@@ -1,0 +1,9 @@
+{
+  "httpMethod": "DELETE",
+  "path": "/user-data/reviews/862",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_JWT_TOKEN_HERE",
+    "Origin": "http://localhost:3000"
+  }
+}

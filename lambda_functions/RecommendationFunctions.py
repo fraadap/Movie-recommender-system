@@ -1,18 +1,18 @@
 import json
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 import numpy as np
 import boto3
 import os
 import tempfile
 import onnxruntime
 from tokenizers import Tokenizer
+import io
 
 from utils.config import Config
 from utils.utils_function import get_authenticated_user, build_response, get_item_converted
 import utils.database as db
 
 # Global variables for caching
-_embeddings = None
 _model = None
 _tokenizer = None
 _model_config = None
@@ -192,8 +192,7 @@ def recommend_semantic(query, top_k):
         
         onnx_inputs = {
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids
+            "attention_mask": attention_mask
         }
         
         # Run inference
@@ -279,17 +278,19 @@ def recommend_collaborative(user_id, top_k):
         
         if not user_ratings:
             return []
-            
+
         other_users = {}
         for mid in user_ratings:
-            resp_movies = reviews_tbl.query(IndexName='MovieIndex', KeyConditionExpression=Key('movie_id').eq(str(mid)))
+            resp_movies = reviews_tbl.scan(FilterExpression=Attr('movie_id').eq(str(mid)))
             for itm in resp_movies.get('Items', []):
                 other = itm['user_id']
                 rating = float(itm['rating'])
                 if other == str(user_id): 
                     continue
                 other_users.setdefault(other, {})[mid] = rating
-                
+        if not other_users:
+            return []
+
         sims_users = []
         for other, ratings in other_users.items():
             common = set(ratings.keys()) & set(user_ratings.keys())
@@ -301,10 +302,10 @@ def recommend_collaborative(user_id, top_k):
             sim = float(np.dot(u, v) / denom) if denom != 0 else 0.0
             if sim > 0:
                 sims_users.append((other, sim))
-                
+        if not sims_users:
+            return []
         sims_users.sort(key=lambda x: x[1], reverse=True)
         top_users = [u for u, _ in sims_users[:10]]
-        
         scores = {}
         weights = {}
         for other in top_users:
@@ -317,10 +318,14 @@ def recommend_collaborative(user_id, top_k):
                 r = float(itm['rating'])
                 scores[mid] = scores.get(mid, 0.0) + sim_score * r
                 weights[mid] = weights.get(mid, 0.0) + sim_score
-                
+        
         results = [(mid, scores[mid] / weights[mid]) for mid in scores if weights.get(mid, 0) > 0]
+        
+        if not results:
+            return []
         results.sort(key=lambda x: x[1], reverse=True)
         results = get_item_converted(results)
+        print(type(results))
         return results[:top_k]
     except Exception as e:
         print(f"Error in collaborative filtering recommendation: {str(e)}")
@@ -329,27 +334,76 @@ def recommend_collaborative(user_id, top_k):
 # Utility functions
 
 
+def parse_embeddings_array(arr):
+    """
+    arr: numpy array shape (N, 385), 
+    con le prime 384 colonne float embedding e l'ultima colonna string movie_id
+    """
+    embeddings_dict = {}
+    
+    # Seleziona tutte le righe
+    for i in range(arr.shape[0]):
+        # Estrai embedding come float array
+        embedding = arr[i, :-1].astype(np.float32)
+        # Estrai movie_id come stringa
+        movie_id = arr[i, -1]
+        # Se movie_id è bytes, decodifica
+        if isinstance(movie_id, bytes):
+            movie_id = movie_id.decode('utf-8')
+        embeddings_dict[movie_id] = embedding
+    
+    return embeddings_dict
+
 def load_embeddings():
     """
     Load embeddings from S3 bucket
+    Support .npz (compressed numpy archive), .npy (binary numpy array) and .jsonl (text) formats
     """
-    global _embeddings
-    if _embeddings is None:
+    if Config._embeddings is None:
         try:
+            print("Loading embeddings.")
             if not Config.EMBEDDINGS_BUCKET:
                 raise ValueError("EMBEDDINGS_BUCKET not configured")
             s3 = get_s3_client()
+
+            print(f"Loading embeddings from s3://{Config.EMBEDDINGS_BUCKET}/{Config.EMBEDDINGS_OUTPUT_FILE}")
             obj = s3.get_object(Bucket=Config.EMBEDDINGS_BUCKET, Key=Config.EMBEDDINGS_OUTPUT_FILE)
-            temp = {}
-            for line in obj["Body"].iter_lines():
-                rec = json.loads(line.decode('utf-8'))
-                temp[rec['movie_id']] = rec['embedding']
-            _embeddings = temp
+
+            file_content = obj["Body"].read()
+            print(f"File size: {len(file_content)} bytes")
+            file_like = io.BytesIO(file_content)
+
+            if Config.EMBEDDINGS_OUTPUT_FILE.endswith('.npz'):
+                print("Detected .npz format, loading as compressed numpy archive")
+                npzfile = np.load(file_like, allow_pickle=True)
+
+                # Se il file .npz contiene più array, prendi il primo (o modifica se sai il nome)
+                # Qui assumiamo un solo array o prendiamo il primo disponibile
+                array_names = npzfile.files
+                if not array_names:
+                    raise ValueError("No arrays found in .npz file")
+                arr = npzfile[array_names[0]]
+                print(f"Loaded array '{array_names[0]}' with shape {arr.shape} and dtype {arr.dtype}")
+
+                # Caso specifico: array 2D con embeddings + movie_id
+                if arr.ndim == 2 and arr.shape[1] == 385:
+                    temp = {}
+                    for i in range(arr.shape[0]):
+                        embedding = arr[i, :-1].astype(np.float32)
+                        movie_id = arr[i, -1]
+                        if isinstance(movie_id, bytes):
+                            movie_id = movie_id.decode('utf-8')
+                        temp[movie_id] = embedding
+                    Config._embeddings = temp
+                else:
+                    raise ValueError(f"Unexpected array shape or format in .npz: {arr.shape}")
+            print("Finish loading embeddings")
         except Exception as e:
             print(f"Error loading embeddings: {str(e)}")
+            import traceback
+            print(f"Traceback: {traceback.format_exc()}")
             raise
-    return _embeddings
-
+    return Config._embeddings
 
 
 def get_model():
@@ -382,7 +436,7 @@ def get_model():
                 
                 _tokenizer = Tokenizer.from_file(tokenizer_path)
                   # Configure tokenizer padding and truncation
-                max_seq_length = _model_config.get("max_position_embeddings", 128)
+                max_seq_length = _model_config.get("max_positionConfig._embeddings", 128)
                 pad_token_id = _tokenizer.token_to_id("[PAD]")
                 if pad_token_id is None:
                     print("Warning: '[PAD]' token not found. Assuming ID 0 for padding.")
