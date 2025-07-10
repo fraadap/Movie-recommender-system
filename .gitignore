@@ -1,3 +1,6 @@
 conv.py
 infer.py
 initial_setup/model_onnx
+__pycache__/
+
+evaluation
