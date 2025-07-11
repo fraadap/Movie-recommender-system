@@ -5,6 +5,10 @@ import string
 # host locust: https://kzy0xi6gle.execute-api.us-east-1.amazonaws.com/deploy
 
 class MovieUser(HttpUser):
+
+    def on_start(self):
+        self.client.post("/")
+
     wait_time = between(1, 2)
     valid_movie_ids = ["228", "4274", "265330", "79860", "133469"]
     token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOWRiN2FmYTItNmJkOC00ZTYwLTk4Y2MtMWQ1ZjYxMDdlOTQ5IiwiZW1haWwiOiJkYXByaWxlLmZyYW5jZXNjbzAyQGdtYWlsLmNvbSIsIm5hbWUiOiJmcmFhLmRhcCIsImlhdCI6MTc0OTEzMTUwNywiZXhwIjoxMTc0OTEzMTUwNn0.gmnOqH-cm-0BXmmGYG97B0X80AlThniWV-pa5hdvXvE"
@@ -55,6 +59,4 @@ class MovieUser(HttpUser):
         response = self.client.post("/collaborative", headers={
             "Authorization": f"Bearer {self.token}"
         }, json={"top_k": 10})
-        print(response.json())
-
     
