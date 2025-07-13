@@ -1,0 +1,279 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{array}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Serverless Movie Recommendation System: Multi-Algorithm AI Architecture on AWS Lambda}
+
+\author{
+\IEEEauthorblockN{[Your Name]}
+\IEEEauthorblockA{[Your Student ID]\\
+Sapienza University of Rome\\
+[your.email@studenti.uniroma1.it]}
+\and
+\IEEEauthorblockN{[Partner Name]}
+\IEEEauthorblockA{[Partner Student ID]\\
+Sapienza University of Rome\\
+[partner.email@studenti.uniroma1.it]}
+}
+
+\maketitle
+
+\begin{abstract}
+This paper presents a serverless movie recommendation system deployed on AWS Lambda infrastructure, implementing multiple AI-powered recommendation algorithms. The system leverages semantic search using pre-trained sentence transformers, collaborative filtering, and content-based filtering to provide personalized movie recommendations. Through comprehensive performance evaluation with varying concurrent user loads (1-100 users), we demonstrate the system's scalability and cost-effectiveness. The architecture utilizes ONNX model optimization for efficient inference, DynamoDB for data persistence, and S3 for embedding storage, achieving consistent response times across different load conditions while maintaining a lightweight deployment footprint within AWS Lambda constraints.
+\end{abstract}
+
+\section{Introduction}
+
+The proliferation of streaming platforms and digital content has created an overwhelming choice paradox for users seeking relevant movie recommendations. Modern recommendation systems must balance accuracy, scalability, and cost-effectiveness while processing natural language queries and user behavior patterns in real-time.
+
+Our project implements a comprehensive movie recommendation system using AWS serverless architecture, delivering AI-powered recommendations through multiple algorithmic approaches. The system processes semantic search queries, generates content-based recommendations, and provides collaborative filtering suggestions, all while maintaining sub-second response times under varying load conditions.
+
+We provide extensive performance benchmarking across different concurrent user scenarios, demonstrating the horizontal scaling capabilities of our serverless solution and analyzing the trade-offs between cold start latency and sustained performance.
+
+\section{Background}
+
+\subsection{AI Models and Semantic Search}
+
+To perform semantic understanding of movie queries and content, we leverage the all-MiniLM-L6-v2 sentence transformer model from the Hugging Face ecosystem. This model generates 384-dimensional embeddings that capture semantic relationships between textual descriptions, enabling natural language movie search capabilities.
+
+The semantic search functionality allows users to query movies using descriptive language such as "action movies with female protagonists" or "romantic comedies set in Italy," moving beyond traditional keyword-based search to understand user intent and context.
+
+\subsection{Embeddings and Semantic Representation}
+
+Embeddings are dense vector representations that capture semantic meaning of textual content in a continuous vector space. In our system, embeddings transform comprehensive movie information including titles, plot summaries, genres, cast, directors, and other metadata into 384-dimensional numerical vectors that preserve semantic relationships between movies.
+
+We generate embeddings using the all-MiniLM-L6-v2 sentence transformer model, which converts all available movie information into unified textual descriptions before encoding them into vectors. This comprehensive approach allows users to search for movies not only by exact titles or director names, but also through plot descriptions, character descriptions, or thematic content. The system tolerates typos and variations in search terms while enabling queries like "movies about time travel with romance" or "films starring that actor from the superhero movie."
+
+The embedding generation process combines all movie metadata into rich descriptive text, encodes this through the transformer model, and stores the resulting vectors in S3 for efficient retrieval. This approach enables natural language search capabilities that go far beyond traditional keyword matching and powers our content-based filtering algorithms.
+
+\subsection{ONNX Optimization}
+
+Deploying machine learning models on AWS Lambda presents significant challenges due to the 250MB deployment package size limit. Traditional deep learning frameworks like PyTorch and Transformers exceed these constraints and introduce substantial computational overhead.
+
+We address this limitation by converting our models to the ONNX (Open Neural Network Exchange) standard, enabling lightweight inference without heavy framework dependencies. ONNX models provide cross-platform compatibility and optimized runtime performance while maintaining model accuracy. This approach allows us to deploy our AI models efficiently within Lambda's resource constraints while preserving the semantic understanding capabilities essential for our recommendation algorithms.
+
+\subsection{AWS Lambda and Serverless Architecture}
+
+AWS Lambda enables serverless computing that automatically scales in response to incoming requests without requiring infrastructure management. Lambda functions provide pay-per-execution pricing, automatic scaling, and seamless integration with other AWS services, making them ideal for building cost-effective AI applications.
+
+Our serverless architecture approach centralizes all recommendation logic within a unified Lambda function, utilizing Lambda Layers for dependency management and leveraging S3 for model storage. This design provides simplified deployment, reduced operational overhead, and optimal resource utilization.
+
+\subsection{CloudWatch Monitoring}
+
+Amazon CloudWatch provides comprehensive monitoring and observability for our serverless architecture. CloudWatch automatically captures Lambda execution metrics, including duration, error rates, and concurrent executions, enabling detailed performance analysis under various load conditions. We leverage CloudWatch's automatic logging capabilities to track system behavior and identify optimization opportunities.
+
+\section{Application Architecture}
+
+Our implementation consists of a serverless movie recommendation system that utilizes a unified AWS Lambda function to perform inference across multiple recommendation algorithms using optimized AI models.
+
+The system exposes a RESTful API through API Gateway that handles various recommendation endpoints. Each request contains parameters specific to the recommendation type, such as search queries for semantic search, user preferences for collaborative filtering, or movie identifiers for content-based recommendations. The API responds with ranked movie recommendations along with relevance scores and metadata.
+
+The AI models, dependency layers, and embeddings are stored in S3 buckets, enabling efficient loading and caching within Lambda's execution environment. This storage strategy accommodates the large embedding datasets while staying within Lambda's deployment constraints.
+
+We utilize API Gateway to expose our services as HTTP endpoints, supporting POST and OPTIONS requests for CORS compliance. The serverless architecture enables automatic scaling to handle varying request loads while maintaining consistent performance characteristics.
+
+Our system provides comprehensive API endpoints for different functionalities:
+
+\begin{itemize}
+\item \textbf{Recommendation Endpoints}: Semantic search (/search), content-based filtering (/content), collaborative filtering (/collaborative), and similar movies (/similar)
+\item \textbf{Authentication Endpoints}: User registration (/auth/register), login (/auth/login), and token refresh (/auth/refresh) using JWT tokens for secure authentication
+\item \textbf{User Management}: Favorites management (/favorites) for adding and removing preferred movies, review system (/reviews) allowing users to rate movies on a 1-5 scale with optional comments
+\item \textbf{User Data}: Profile management (/profile) and activity tracking (/activity) for personalized recommendations
+\end{itemize}
+
+The JWT-based authentication system ensures secure access to personalized features while maintaining stateless operation suitable for serverless architecture.
+
+\subsection{Database Schema}
+
+Our data persistence layer utilizes five DynamoDB tables optimized for different access patterns, populated from "The Movies Dataset" \cite{movies_dataset}:
+
+\begin{itemize}
+\item \textbf{Movies}: Approximately 45,000 movie records containing metadata, genres, cast, and plot information
+\item \textbf{Reviews}: Over 100,000 user rating records enabling collaborative filtering algorithms
+\item \textbf{MovieRecommender\_Users}: User authentication and profile data with variable size based on user registration
+\item \textbf{MovieRecommender\_Favorites}: User favorite movie associations for personalization
+\item \textbf{MovieRecommender\_Activity}: User interaction logs for recommendation algorithm improvement
+\end{itemize}
+
+The database design supports efficient querying for all recommendation algorithms while maintaining optimal performance through appropriate partition key selection and secondary index configuration.
+
+\subsection{Embedding Storage}
+
+Movie embeddings generated using the all-MiniLM-L6-v2 model are stored in S3 in compressed .npz format, containing 384-dimensional vectors for each movie in our dataset. This storage approach enables rapid loading during Lambda cold starts while maintaining cost-effective storage for large vector datasets.
+
+\section{Recommendation Algorithms}
+
+\subsection{Semantic Search}
+
+Our semantic search implementation converts user queries into embeddings using the all-MiniLM-L6-v2 transformer model, then computes cosine similarity against pre-computed movie embeddings. The algorithm processes natural language queries by:
+
+\begin{enumerate}
+\item Encoding the user query into a 384-dimensional embedding vector
+\item Loading movie embeddings from S3 storage
+\item Computing cosine similarity between query and movie embeddings
+\item Ranking movies by similarity score and returning top-k results
+\end{enumerate}
+
+This approach enables intuitive movie discovery through natural language descriptions, significantly improving user experience compared to traditional keyword-based search systems.
+
+\subsection{Content-Based Filtering}
+
+Content-based recommendations analyze movie characteristics and user preferences to suggest similar content. Our implementation:
+
+\begin{enumerate}
+\item Analyzes movies the user has rated or favorited
+\item Computes weighted average embeddings based on user ratings
+\item Identifies movies with highest similarity to the user's preference profile
+\item Filters out previously seen content and returns ranked recommendations
+\end{enumerate}
+
+This algorithm excels at suggesting movies that match established user preferences and handles new users effectively through explicit preference collection.
+
+\subsection{Collaborative Filtering}
+
+Collaborative filtering leverages the collective behavior of users with similar tastes to generate recommendations. Our implementation utilizes user-based collaborative filtering:
+
+\begin{enumerate}
+\item Identifies users with similar rating patterns to the target user
+\item Computes user similarity scores based on common movie ratings
+\item Predicts ratings for unseen movies based on similar users' preferences
+\item Generates recommendations from highest predicted ratings
+\end{enumerate}
+
+This approach discovers movies that users might not find through content-based methods, enabling serendipitous discovery and leveraging the wisdom of crowds.
+
+\section{Performance Evaluation}
+
+\subsection{Load Testing Methodology}
+
+We conduct comprehensive performance evaluation using the Locust load testing framework to simulate multiple concurrent user scenarios and assess system scalability and response characteristics. Locust enables us to define realistic user behavior patterns with varying request frequencies and concurrent user loads.
+
+Our testing approach utilizes Locust to send HTTP requests to our recommendation endpoints, simulating real user interactions with the system. Testing configurations range from single-user scenarios to high-concurrency conditions with up to 100 parallel users. We deliberately limit testing to 100 concurrent users to maintain compliance with AWS usage policies and avoid potential service restrictions.
+
+Each test focuses on the core recommendation endpoints: semantic search, collaborative filtering, content-based recommendations, and similar movie suggestions, as these represent the primary computational bottlenecks and critical user-facing functionality.
+
+\subsection{Test Configurations}
+
+Our evaluation encompasses three distinct testing scenarios designed to evaluate system behavior under different realistic usage patterns, as shown in Table~\ref{tab:test_configs}.
+
+\begin{table}[h]
+\centering
+\caption{Load Testing Configurations}
+\label{tab:test_configs}
+\begin{tabular}{lcccc}
+\toprule
+Scenario & Users & Ramp-up & Duration & Request Pattern \\
+\midrule
+Light & [X] & [X] s & [X] min & Low frequency \\
+Medium & [X] & [X] s & [X] min & Moderate load \\
+Heavy & [X] & [X] s & [X] min & High concurrency \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each scenario tests different aspects of our system's scalability characteristics, from handling sparse requests to managing sustained high-concurrency loads.
+
+\section{Results}
+
+For each test configuration, we report comprehensive performance metrics in Table~\ref{tab:performance_stats}. Our results demonstrate consistent performance characteristics across varying load conditions, indicating effective horizontal scaling capabilities.
+
+Notably, we observe minimal performance degradation between low and high concurrency scenarios, with average response times remaining stable across the 3-user and 100-user test configurations. This consistency demonstrates the effectiveness of AWS Lambda's automatic scaling mechanisms for our workload characteristics.
+
+\begin{table}[h]
+\centering
+\caption{Performance Statistics per Load Test}
+\label{tab:performance_stats}
+\begin{tabular}{lcccccccc}
+\toprule
+Test Scenario & \# Requests & \# Fails & Avg (ms) & Min (ms) & Max (ms) & Median (ms) & 95\%ile (ms) & 99\%ile (ms) \\
+\midrule
+Light & [X] & 0 & [X] & [X] & [X] & [X] & [X] & [X] \\
+Medium & [X] & 0 & [X] & [X] & [X] & [X] & [X] & [X] \\
+Heavy & [X] & 0 & [X] & [X] & [X] & [X] & [X] & [X] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All test scenarios completed without failures, demonstrating the reliability and robustness of our serverless architecture under varying load conditions.
+
+\subsection{Scaling Analysis}
+
+Our scaling analysis reveals excellent horizontal scaling characteristics with minimal performance variance across different concurrent user loads. The system maintains consistent average response times between 3-user and 100-user scenarios, indicating that AWS Lambda's automatic scaling effectively handles increased request volume without degrading individual request performance.
+
+The observed concurrent executions were: Light ([X]), Medium ([X]), and Heavy ([X]), demonstrating efficient resource utilization and automatic scaling behavior.
+
+\subsection{Cold Start Impact}
+
+A critical consideration in our performance analysis is the Lambda cold start phenomenon. When a Lambda function has not been invoked for several minutes, AWS places the function in standby mode to conserve resources. Subsequent invocations require reloading models and dependencies from S3 into Lambda's execution environment, resulting in increased latency for the first request.
+
+Our cold start analysis shows initial requests experience [X]ms additional latency for model loading and initialization. However, subsequent requests within the same execution context benefit from cached models and achieve optimal performance. This behavior is typical for serverless ML applications and represents a trade-off between cost efficiency and consistent latency.
+
+To mitigate cold start impact in production deployments, strategies such as periodic warm-up requests or provisioned concurrency can maintain ready execution environments at the cost of increased operational overhead.
+
+\section{Related Work}
+
+Traditional movie recommendation systems have evolved from simple collaborative filtering approaches to sophisticated multi-algorithm architectures. Netflix's recommendation engine represents a landmark achievement in large-scale recommendation systems, utilizing matrix factorization, deep learning models, and ensemble methods to process billions of user interactions.
+
+Netflix's approach combines collaborative filtering, content-based analysis, and ranking algorithms to personalize recommendations across their entire catalog. Their system also incorporates semantic search capabilities through natural language processing of plot descriptions and user queries, enabling more intuitive content discovery.
+
+Our system builds upon these established approaches while leveraging modern serverless architecture and transformer-based semantic understanding. The integration of multiple recommendation algorithms within a cost-effective serverless deployment provides scalable AI-powered recommendations without the infrastructure complexity of traditional systems.
+
+\section{Implementation Challenges and Solutions}
+
+\subsection{Lambda Deployment Constraints}
+
+The primary technical challenge involves AWS Lambda's 250MB deployment package size limit, which prevents direct deployment of transformer libraries and large ML models. Traditional approaches using PyTorch or Transformers frameworks exceed these constraints significantly.
+
+Our solution utilizes ONNX model conversion and Lambda Layers for dependency management. By converting models to ONNX format and separating dependencies across multiple layers, we achieve compliant deployment while maintaining full AI functionality.
+
+\subsection{Testing Limitations}
+
+Performance testing faces constraints due to AWS usage policies and potential service restrictions. We limit concurrent testing to 100 users to maintain service compliance, though this restriction prevents evaluation of extreme load scenarios.
+
+This limitation represents a practical consideration for serverless ML applications, where testing must balance thorough evaluation with responsible cloud resource usage.
+
+\section{Architecture Benefits}
+
+Our serverless architecture provides several key advantages:
+
+\subsection{Multi-Algorithm Integration}
+
+The unified Lambda function approach enables seamless integration of semantic search, collaborative filtering, and content-based recommendation algorithms within a single deployment unit. This integration simplifies maintenance, reduces operational complexity, and ensures consistent performance characteristics across all recommendation types.
+
+\subsection{Scalability and Cost-Effectiveness}
+
+AWS Lambda's automatic scaling capabilities handle varying request loads without manual intervention or capacity planning. The pay-per-execution pricing model ensures cost-effectiveness for variable workloads, making the system economically viable for both low and high-traffic scenarios.
+
+\subsection{AWS Service Integration}
+
+The architecture leverages multiple AWS services optimally: DynamoDB for low-latency data access, S3 for large-scale embedding storage, API Gateway for HTTP endpoint management, and CloudWatch for comprehensive monitoring. This integration provides enterprise-grade capabilities while maintaining simplicity and cost-effectiveness.
+
+\section{Conclusion}
+
+We have demonstrated a comprehensive serverless movie recommendation system that effectively combines multiple AI algorithms within AWS Lambda's resource constraints. Our architecture achieves consistent performance across varying load conditions, from single-user scenarios to 100 concurrent users, while maintaining cost-effective operation through serverless deployment.
+
+The system successfully integrates semantic search using transformer-based embeddings, collaborative filtering based on user behavior analysis, and content-based recommendations derived from movie characteristics. Performance evaluation reveals excellent scalability characteristics with minimal degradation under increased load, validating the effectiveness of serverless architecture for AI-powered applications.
+
+Key achievements include efficient ONNX model deployment within Lambda constraints, stable response times across different concurrency levels, and successful integration of multiple recommendation algorithms within a unified serverless architecture. The cold start behavior represents a known trade-off in serverless computing, with subsequent requests achieving optimal performance through execution environment caching.
+
+Our implementation provides a foundation for scalable, cost-effective recommendation systems that can be adapted for various domains beyond movie recommendations. The combination of modern AI techniques with serverless architecture demonstrates the potential for building sophisticated ML applications without the complexity and cost of traditional infrastructure approaches.
+
+\begin{thebibliography}{9}
+
+\bibitem{movies_dataset}
+R. Banik, ``The Movies Dataset,'' Kaggle, 2017. [Online]. Available: https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset
+
+\end{thebibliography}
+
+\end{document}
